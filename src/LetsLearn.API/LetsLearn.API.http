@@ -1,0 +1,6 @@
+@LetsLearn.API_HostAddress = http://localhost:8080
+
+GET {{LetsLearn.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

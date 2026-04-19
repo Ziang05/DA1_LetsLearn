@@ -1,0 +1,56 @@
+services:
+  letslearn.api:
+    image: ${DOCKER_REGISTRY-}letslearnapi
+    build:
+      context: .
+      dockerfile: LetsLearn.API/Dockerfile
+    ports:
+      - "8100:8080"  
+    depends_on:
+      - postgres
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080;
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://aspire-dashboard:18890
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+    networks:
+      - productnetwork
+    restart: on-failure
+
+  postgres:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: letslearn
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - productnetwork
+
+  redis:
+    image: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - productnetwork
+    restart: on-failure
+
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:9.3
+    environment:
+      DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"
+    ports:
+      - "18890:18888"
+    networks:
+      - productnetwork
+
+networks:
+  productnetwork:
+
+volumes:
+  pgdata:
+    name: letslearn_pgdata
