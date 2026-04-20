@@ -1,0 +1,17 @@
+﻿using LetsLearn.Core.Entities;
+using LetsLearn.Core.Interfaces;
+using LetsLearn.Infrastructure.Data;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace LetsLearn.Infrastructure.Repository
+{
+    public class TopicQuizQuestionRepository : GenericRepository<TopicQuizQuestion>, ITopicQuizQuestionRepository
+    {
+        public TopicQuizQuestionRepository(LetsLearnContext context) : base(context) { }
+
+    }
+}
