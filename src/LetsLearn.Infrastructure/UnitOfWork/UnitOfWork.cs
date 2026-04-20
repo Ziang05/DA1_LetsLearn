@@ -15,11 +15,14 @@ namespace LetsLearn.Infrastructure.UnitOfWork
     {
         private readonly LetsLearnContext _context;
 
-
+        public IUserRepository Users { get; private set; }
+        public IRefreshTokenRepository RefreshTokens { get; private set; }
         public UnitOfWork(LetsLearnContext context)
         {
             _context = context;
-            
+
+            Users = new UserRepository(_context);
+            RefreshTokens = new RefreshTokenRepository(_context);
         }
 
         public async Task<int> CommitAsync() =>
