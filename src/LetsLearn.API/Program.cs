@@ -131,7 +131,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend",
         builder => builder
-            .WithOrigins("http://localhost:4200") // FE port
+            .WithOrigins("http://localhost:4200", "http://localhost:3000") // FE port
             .AllowAnyHeader()
             .AllowAnyMethod()
             .SetIsOriginAllowed(origin => true)
