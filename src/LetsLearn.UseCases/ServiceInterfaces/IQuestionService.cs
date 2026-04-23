@@ -1,4 +1,4 @@
-﻿using LetsLearn.UseCases.DTOs;
+using LetsLearn.UseCases.DTOs;
 using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
@@ -16,5 +16,6 @@ namespace LetsLearn.UseCases.ServiceInterfaces
         Task<IEnumerable<GetQuestionResponse>> GetByCourseIdAsync(string courseId, CancellationToken ct = default);
         Task<int> BulkCreateAsync(List<CreateQuestionRequest> requests, Guid userId, CancellationToken ct = default);
         Task<int> ImportBulkQuestionsAsync(IFormFile file, string courseId, Guid userId, CancellationToken ct);
+        Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
     }
 }

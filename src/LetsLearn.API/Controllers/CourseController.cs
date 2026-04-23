@@ -1,4 +1,4 @@
-﻿using LetsLearn.Core.Entities;
+using LetsLearn.Core.Entities;
 using LetsLearn.UseCases.DTOs;
 using LetsLearn.UseCases.ServiceInterfaces;
 using LetsLearn.UseCases.Services.CourseClone;
@@ -117,8 +117,7 @@ namespace LetsLearn.API.Controllers
         private string CreateLiveKitToken(string userId, string userName, string roomName, string apiKey, string apiSecret, string metadataJson)
         {
             var now = DateTimeOffset.UtcNow;
-            var nbf = now; // Not before - token is valid immediately
-            var exp = now.AddHours(24); // Token expires in 24 hours
+            var exp = now.AddHours(24);
 
             // Create video permissions as proper object for JSON serialization
             var videoPermissions = new Dictionary<string, object>
@@ -129,32 +128,24 @@ namespace LetsLearn.API.Controllers
                 {"canSubscribe", true}
             };
 
-            // Serialize video permissions to JSON
-            var videoJson = JsonSerializer.Serialize(videoPermissions);
-
-            // Create claims for LiveKit JWT
-            var claims = new List<Claim>
+            // Use JwtPayload to handle JSON claims (like 'video') correctly as objects
+            var payload = new JwtPayload
             {
-                new Claim(JwtRegisteredClaimNames.Iss, apiKey),
-                new Claim(JwtRegisteredClaimNames.Sub, userId),
-                new Claim(JwtRegisteredClaimNames.Iat, now.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64),
-                new Claim(JwtRegisteredClaimNames.Nbf, nbf.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64),
-                new Claim(JwtRegisteredClaimNames.Exp, exp.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64),
-                new Claim("name", userName),
-                new Claim("video", videoJson, JsonClaimValueTypes.Json),
-                new Claim("metadata", metadataJson)
+                { JwtRegisteredClaimNames.Iss, apiKey },
+                { JwtRegisteredClaimNames.Sub, userId },
+                { JwtRegisteredClaimNames.Iat, now.ToUnixTimeSeconds() },
+                { JwtRegisteredClaimNames.Nbf, now.ToUnixTimeSeconds() },
+                { JwtRegisteredClaimNames.Exp, exp.ToUnixTimeSeconds() },
+                { "name", userName },
+                { "video", videoPermissions }, // This will be serialized as a JSON object
+                { "metadata", metadataJson }
             };
 
             var key = Encoding.UTF8.GetBytes(apiSecret);
             var signingCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256);
-
-            var token = new JwtSecurityToken(
-                issuer: apiKey,
-                claims: claims,
-                notBefore: nbf.DateTime,
-                expires: exp.DateTime,
-                signingCredentials: signingCredentials
-            );
+            
+            var header = new JwtHeader(signingCredentials);
+            var token = new JwtSecurityToken(header, payload);
 
             return new JwtSecurityTokenHandler().WriteToken(token);
         }

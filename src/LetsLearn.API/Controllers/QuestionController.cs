@@ -1,4 +1,4 @@
-﻿using LetsLearn.UseCases.DTOs;
+using LetsLearn.UseCases.DTOs;
 using LetsLearn.UseCases.ServiceInterfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -159,6 +159,30 @@ namespace LetsLearn.WebApi.Controllers
             catch (Exception ex)
             {
                 return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        // DELETE: question/{id}
+        [HttpDelete("{id:guid}")]
+        public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+        {
+            try
+            {
+                _logger.LogInformation("Deleting question {QuestionId}", id);
+                var result = await _service.DeleteAsync(id, ct);
+                if (!result)
+                {
+                    _logger.LogWarning("Question {QuestionId} not found for deletion", id);
+                    return NotFound(new { message = "Question not found." });
+                }
+
+                _logger.LogInformation("Question {QuestionId} deleted successfully", id);
+                return Ok(new { message = "Question deleted successfully." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting question {QuestionId}", id);
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Failed to delete question." });
             }
         }
 

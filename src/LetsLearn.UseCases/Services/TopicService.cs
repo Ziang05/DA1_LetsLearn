@@ -1,4 +1,4 @@
-﻿using LetsLearn.Core.Entities;
+using LetsLearn.Core.Entities;
 using LetsLearn.Core.Interfaces;
 using LetsLearn.UseCases.DTOs;
 using LetsLearn.UseCases.ServiceInterfaces;
@@ -432,13 +432,31 @@ namespace LetsLearn.UseCases.Services
                         var existingQuestions = quiz.Questions.ToDictionary(q => q.Id);
 
                         // Danh sách Id mới từ request
-                        var incomingIds = quizReq.Questions.Where(q => q.Id != null)
+                        var incomingIds = quizReq.Questions
+                                       .Where(q => q.Id != null)
                                        .Select(q => q.Id!.Value)
                                        .ToHashSet();
 
+                        // 2. Xóa các câu hỏi không còn trong danh sách mới
+                        var questionsToRemove = quiz.Questions
+                            .Where(q => !incomingIds.Contains(q.Id))
+                            .ToList();
+                        
+                        if (questionsToRemove.Any())
+                        {
+                            _logger.LogInformation("Removing {RemoveCount} questions from quiz {TopicId}", 
+                                questionsToRemove.Count, topic.Id);
+                            await _unitOfWork.TopicQuizQuestions.DeleteRangeAsync(questionsToRemove);
+                            
+                            // Cập nhật lại list local của quiz để tí nữa loop ko bị conflict
+                            foreach(var rm in questionsToRemove) {
+                                quiz.Questions.Remove(rm);
+                            }
+                        }
+
                         // LOG: Existing vs incoming questions
-                        _logger.LogInformation("Existing questions: {ExistingCount}, Incoming questions: {IncomingCount}",
-                            existingQuestions.Count, quizReq.Questions.Count);
+                        _logger.LogInformation("Existing questions after removal: {ExistingCount}, Incoming questions: {IncomingCount}",
+                            quiz.Questions.Count, quizReq.Questions.Count);
 
                         // 3. Xử lý từng câu hỏi trong request
                         foreach (var q in quizReq.Questions)
@@ -821,6 +839,8 @@ namespace LetsLearn.UseCases.Services
 
         public async Task<SingleQuizReportDTO> GetSingleQuizReportAsync(String courseId, Guid topicId, CancellationToken ct = default)
         {
+            _logger.LogInformation("Generating Quiz Report for course {CourseId}, topic {TopicId}", courseId, topicId);
+            
             // Fetch Course
             var course = await _unitOfWork.Course.GetByIdAsync(courseId, ct)
                 ?? throw new KeyNotFoundException("Course not found");
@@ -837,82 +857,99 @@ namespace LetsLearn.UseCases.Services
             var topicQuiz = await _unitOfWork.TopicQuizzes.GetWithQuestionsAsync(topicId)
                 ?? throw new KeyNotFoundException("No topic quiz found");
 
-            // Use topicQuiz.Questions to get the list of quiz questions
             var quizQuestions = topicQuiz.Questions;
+            _logger.LogInformation("Quiz found with {QuestionCount} questions", quizQuestions?.Count ?? 0);
 
             // Fetch quiz responses of students
             var quizResponses = await _unitOfWork.QuizResponses.FindAllByTopicIdWithAnswersAsync(topicId, ct);
+            _logger.LogInformation("Found {ResponseCount} quiz responses", quizResponses?.Count ?? 0);
 
             // Get students who participated in the quiz
-            var topicEndTime = topicQuiz.Close ?? DateTime.MaxValue;
-
             var studentsThatTookPartIn = (await _unitOfWork.Enrollments.GetAllByCourseIdAsync(courseId, ct))
                                             .Where(e => e.StudentId != creatorId)
-                                            .ToList(); ;
+                                            .ToList();
 
             int studentCount = studentsThatTookPartIn.Count;
+            _logger.LogInformation("Found {StudentCount} students enrolled in course", studentCount);
 
             // Create a dictionary for all students with default mark 0 for those who didn't participate
             var marksWithStudentId = studentsThatTookPartIn.ToDictionary(
                 student => student.StudentId,
                 student =>
                 {
-                    // Check if the student has a quiz response, if not set mark as 0
                     var quizResponse = quizResponses.FirstOrDefault(qr => qr.StudentId == student.StudentId);
                     if (quizResponse == null)
                     {
-                        return 0.0; // Student did not participate in the quiz
+                        return 0.0;
                     }
 
-                    // If the student has a response, calculate their mark based on their answers
-                    return (double)quizResponse.Answers.Average(answer =>
+                    if (quizResponse.Answers == null || !quizResponse.Answers.Any())
                     {
-                        var question = JsonSerializer.Deserialize<Question>(answer.Question);
-                        return (answer.Mark / question!.DefaultMark ?? 1) * 10;
-                    });
+                        return 0.0;
+                    }
+
+                    try 
+                    {
+                        return (double)quizResponse.Answers.Average(answer =>
+                        {
+                            if (string.IsNullOrEmpty(answer.Question)) return 0m;
+                            var question = JsonSerializer.Deserialize<Question>(answer.Question);
+                            decimal mark = answer.Mark ?? 0m;
+                            decimal defaultMark = question?.DefaultMark ?? 1m;
+                            if (defaultMark == 0) defaultMark = 1m;
+                            return (mark / defaultMark) * 10m;
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error calculating mark for student {StudentId}", student.StudentId);
+                        return 0.0;
+                    }
                 });
 
-            // Apply the grading method to calculate final marks for each student
             var finalMarksWithStudentId = marksWithStudentId.ToDictionary(
                 entry => entry.Key,
-                entry => CalculateMark(new List<double> { entry.Value }, topicQuiz.GradingMethod!) // Apply grading method
+                entry => CalculateMark(new List<double> { entry.Value }, topicQuiz.GradingMethod ?? "Highest Grade")
             );
 
-            // Calculate average, max, and min marks
-            double avgMark = marksWithStudentId.Values.Average();
-            double maxMark = marksWithStudentId.Values.Max();
-            double minMark = marksWithStudentId.Values.Min();
+            double avgMark = marksWithStudentId.Count > 0 ? marksWithStudentId.Values.Average() : 0;
+            double maxMark = marksWithStudentId.Count > 0 ? marksWithStudentId.Values.Max() : 0;
+            double minMark = marksWithStudentId.Count > 0 ? marksWithStudentId.Values.Min() : 0;
 
-            // Categorize students by marks
-            var studentInfoAndMarks = await GetStudentInfoWithMarkAndResponseIdForQuiz(studentsThatTookPartIn, finalMarksWithStudentId, ct);
+            var studentInfoAndMarks = await GetStudentInfoWithMarkAndResponseIdForQuiz(
+                studentsThatTookPartIn, 
+                finalMarksWithStudentId, 
+                quizResponses.ToList(),
+                ct);
 
+            reportDTO.Name = topic.Title ?? "No Title";
             reportDTO.StudentWithMark = studentInfoAndMarks;
-            reportDTO.StudentWithMarkOver8 = studentInfoAndMarks.Where(info => info.Mark >= 8).ToList();
-            reportDTO.StudentWithMarkOver5 = studentInfoAndMarks.Where(info => info.Mark >= 5 && info.Mark < 8).ToList();
-            reportDTO.StudentWithMarkOver2 = studentInfoAndMarks.Where(info => info.Mark >= 2 && info.Mark < 5).ToList();
-            reportDTO.StudentWithMarkOver0 = studentInfoAndMarks.Where(info => info.Mark < 2).ToList();
+            reportDTO.StudentWithMarkOver8 = studentInfoAndMarks.Where(info => info.Mark >= 8 && info.Submitted).ToList();
+            reportDTO.StudentWithMarkOver5 = studentInfoAndMarks.Where(info => info.Mark >= 5 && info.Mark < 8 && info.Submitted).ToList();
+            reportDTO.StudentWithMarkOver2 = studentInfoAndMarks.Where(info => info.Mark >= 2 && info.Mark < 5 && info.Submitted).ToList();
+            reportDTO.StudentWithMarkOver0 = studentInfoAndMarks.Where(info => info.Mark < 2 && info.Submitted).ToList();
             reportDTO.StudentWithNoResponse = studentInfoAndMarks.Where(info => !info.Submitted).ToList();
 
             var quizResponseDTOs = await MapQuizResponsesToDTO(quizResponses, ct);
 
-            // Calculate completion rate excluding students who did not participate
-            var studentsWithResponse = studentInfoAndMarks.Count(info => info.Submitted); // Count only students who submitted their response
+            var studentsWithResponse = studentInfoAndMarks.Count(info => info.Submitted);
             double completionRate = studentCount > 0 ? (double)studentsWithResponse / studentCount : 0;
 
-            // Update additional metrics
             reportDTO.MarkDistributionCount = CalculateMarkDistribution(marksWithStudentId, studentCount);
-            reportDTO.QuestionCount = quizQuestions.Count;
-            reportDTO.MaxDefaultMark = quizQuestions.Sum(q => (double)q.DefaultMark!);
+            reportDTO.QuestionCount = quizQuestions?.Count ?? 0;
+            reportDTO.MaxDefaultMark = quizQuestions?.Sum(q => (double)(q.DefaultMark ?? 0m)) ?? 0;
             reportDTO.AvgStudentMarkBase10 = avgMark;
             reportDTO.MaxStudentMarkBase10 = maxMark;
             reportDTO.MinStudentMarkBase10 = minMark;
             reportDTO.AttemptCount = quizResponses.Count;
             reportDTO.AvgTimeSpend = CalculateAvgTimeSpend(quizResponseDTOs);
             reportDTO.CompletionRate = completionRate;
-            reportDTO.TrueFalseQuestionCount = quizQuestions.Count(q => q.Type == "True/False");
-            reportDTO.MultipleChoiceQuestionCount = quizQuestions.Count(q => q.Type == "Multiple Choice");
-            reportDTO.ShortAnswerQuestionCount = quizQuestions.Count(q => q.Type == "Short Answer");
+            reportDTO.TrueFalseQuestionCount = quizQuestions?.Count(q => q.Type == "True/False") ?? 0;
+            reportDTO.MultipleChoiceQuestionCount = quizQuestions?.Count(q => q.Type == "Multiple Choice") ?? 0;
+            reportDTO.ShortAnswerQuestionCount = quizQuestions?.Count(q => q.Type == "Short Answer") ?? 0;
+            reportDTO.Students = studentInfoAndMarks.Select(info => info.Student).ToList();
 
+            _logger.LogInformation("Quiz report generated successfully for topic {TopicId}", topicId);
             return reportDTO;
         }
 
@@ -957,17 +994,25 @@ namespace LetsLearn.UseCases.Services
                         return 0.0; // No response, mark is 0
                     }
 
-                    // Calculate mark for the student based on their answers
+                    // Calculate mark for the student
                     return (double)(assignmentResponse.Mark ?? 0m);
                 });
 
+            // Calculate metrics
+            int submissionCount = assignmentResponses.Count();
+            int gradedSubmissionCount = assignmentResponses.Count(res => res.Mark != null);
+
             // Calculate average, max, and min marks
-            double avgMark = marksWithStudentId.Values.Average();
-            double maxMark = marksWithStudentId.Values.Max();
-            double minMark = marksWithStudentId.Values.Min();
+            double avgMark = marksWithStudentId.Count > 0 ? marksWithStudentId.Values.Average() : 0;
+            double maxMark = marksWithStudentId.Count > 0 ? marksWithStudentId.Values.Max() : 0;
+            double minMark = marksWithStudentId.Count > 0 ? marksWithStudentId.Values.Min() : 0;
 
             // Categorize students based on their marks
-            var studentInfoAndMarks = await GetStudentInfoWithMarkAndResponseIdForAssignment(studentsThatTookPartIn, marksWithStudentId, ct);
+            var studentInfoAndMarks = await GetStudentInfoWithMarkAndResponseIdForAssignment(
+                studentsThatTookPartIn, 
+                marksWithStudentId, 
+                assignmentResponses.ToList(),
+                ct);
 
             var fileTypeCount = new Dictionary<string, long>();
             int fileCount = 0;
@@ -997,21 +1042,24 @@ namespace LetsLearn.UseCases.Services
             // Setting up the report DTO
             reportDTO.Name = topic.Title ?? "No Title";
             reportDTO.StudentMarks = studentInfoAndMarks;
-            reportDTO.StudentWithMarkOver8 = studentInfoAndMarks.Where(info => info.Mark >= 8).ToList();
-            reportDTO.StudentWithMarkOver5 = studentInfoAndMarks.Where(info => info.Mark >= 5 && info.Mark < 8).ToList();
-            reportDTO.StudentWithMarkOver2 = studentInfoAndMarks.Where(info => info.Mark >= 2 && info.Mark < 5).ToList();
-            reportDTO.StudentWithMarkOver0 = studentInfoAndMarks.Where(info => info.Mark < 2).ToList();
+            reportDTO.StudentWithMarkOver8 = studentInfoAndMarks.Where(info => info.Mark >= 8 && info.Submitted).ToList();
+            reportDTO.StudentWithMarkOver5 = studentInfoAndMarks.Where(info => info.Mark >= 5 && info.Mark < 8 && info.Submitted).ToList();
+            reportDTO.StudentWithMarkOver2 = studentInfoAndMarks.Where(info => info.Mark >= 2 && info.Mark < 5 && info.Submitted).ToList();
+            reportDTO.StudentWithMarkOver0 = studentInfoAndMarks.Where(info => info.Mark < 2 && info.Submitted).ToList();
             reportDTO.StudentWithNoResponse = studentInfoAndMarks.Where(info => !info.Submitted).ToList();
 
             reportDTO.MarkDistributionCount = CalculateMarkDistribution(marksWithStudentId, studentCount);
             reportDTO.AvgMark = avgMark;
             reportDTO.MaxMark = maxMark;
             reportDTO.MinMark = minMark;
-            reportDTO.CompletionRate = (double)assignmentResponses.Count() / studentCount;
+            reportDTO.CompletionRate = studentCount > 0 ? (double)submissionCount / studentCount : 0;
 
             // Set the file counts and file types
             reportDTO.FileCount = fileCount;
             reportDTO.FileTypeCount = fileTypeCount;
+            reportDTO.SubmissionCount = submissionCount;
+            reportDTO.GradedSubmissionCount = gradedSubmissionCount;
+            reportDTO.Students = studentInfoAndMarks.Select(info => info.Student).ToList();
 
             return reportDTO;
         }
@@ -1079,18 +1127,20 @@ namespace LetsLearn.UseCases.Services
         public async Task<List<SingleQuizReportDTO.StudentInfoAndMarkQuiz>> GetStudentInfoWithMarkAndResponseIdForQuiz(
             List<Enrollment> studentsThatTookPartIn,
             Dictionary<Guid, double> studentIdWithMark,
+            List<QuizResponse> quizResponses,
             CancellationToken ct = default)
         {
             var enrollmentByStudentId = studentsThatTookPartIn.ToDictionary(detail => detail.StudentId);
             var result = new List<SingleQuizReportDTO.StudentInfoAndMarkQuiz>();
 
-            // FIXED: Change parallel operations to sequential to avoid DbContext threading issues
-            // Fetch students with marks sequentially
             foreach (var entry in studentIdWithMark)
             {
                 var studentId = entry.Key;
                 var mark = entry.Value;
                 var enrollment = enrollmentByStudentId[studentId];
+                
+                var response = quizResponses.FirstOrDefault(r => r.StudentId == studentId);
+                if (response == null) continue;
 
                 var user = await _unitOfWork.Users.GetByIdAsync(studentId, ct);
                 if (user == null)
@@ -1103,15 +1153,13 @@ namespace LetsLearn.UseCases.Services
                     Student = MapToDTO(user),
                     Submitted = true,
                     Mark = mark,
-                    ResponseId = null
+                    ResponseId = response.Id
                 });
             }
 
-            // Fetch students with no response sequentially
-            foreach (var entry in enrollmentByStudentId.Where(entry => !studentIdWithMark.ContainsKey(entry.Key)))
+            foreach (var entry in enrollmentByStudentId.Where(entry => !quizResponses.Any(r => r.StudentId == entry.Key)))
             {
                 var studentId = entry.Value.StudentId;
-
                 var user = await _unitOfWork.Users.GetByIdAsync(studentId, ct);
 
                 if (user == null)
@@ -1134,20 +1182,21 @@ namespace LetsLearn.UseCases.Services
         public async Task<List<SingleAssignmentReportDTO.StudentInfoAndMarkAssignment>> GetStudentInfoWithMarkAndResponseIdForAssignment(
             List<Enrollment> studentsThatTookPartIn,
             Dictionary<Guid, double> studentIdWithMark,
+            List<AssignmentResponse> assignmentResponses,
             CancellationToken ct = default)
         {
             var enrollmentByStudentId = studentsThatTookPartIn.ToDictionary(detail => detail.StudentId);
             var result = new List<SingleAssignmentReportDTO.StudentInfoAndMarkAssignment>();
 
-            // FIXED: Change parallel operations to sequential to avoid DbContext threading issues
-            // Fetch students with marks sequentially
             foreach (var entry in studentIdWithMark)
             {
                 var studentId = entry.Key;
                 var mark = entry.Value;
                 var enrollment = enrollmentByStudentId[studentId];
+                
+                var response = assignmentResponses.FirstOrDefault(r => r.StudentId == studentId);
+                if (response == null) continue; // Skip if no response in this loop
 
-                // Get user info asynchronously
                 var user = await _unitOfWork.Users.GetByIdAsync(studentId, ct);
                 if (user == null)
                 {
@@ -1157,13 +1206,13 @@ namespace LetsLearn.UseCases.Services
                 result.Add(new SingleAssignmentReportDTO.StudentInfoAndMarkAssignment
                 {
                     Student = MapToDTO(user),
+                    Submitted = true,
                     Mark = mark,
-                    ResponseId = null
+                    ResponseId = response.Id
                 });
             }
 
-            // Fetch students with no response sequentially
-            foreach (var entry in enrollmentByStudentId.Where(entry => !studentIdWithMark.ContainsKey(entry.Key)))
+            foreach (var entry in enrollmentByStudentId.Where(entry => !assignmentResponses.Any(r => r.StudentId == entry.Key)))
             {
                 var studentId = entry.Value.StudentId;
                 var user = await _unitOfWork.Users.GetByIdAsync(studentId, ct);
@@ -1245,7 +1294,9 @@ namespace LetsLearn.UseCases.Services
                             // Chuyển đổi Answer thành DTO
                             Answer = answer.Answer,
                             Mark = answer.Mark,
-                            TopicQuizQuestionId = (JsonSerializer.Deserialize<Question>(answer.Question!)!).Id
+                            TopicQuizQuestionId = !string.IsNullOrEmpty(answer.Question) 
+                                ? (JsonSerializer.Deserialize<Question>(answer.Question)?.Id ?? Guid.Empty)
+                                : Guid.Empty
                         }).ToList()
                 }
             };

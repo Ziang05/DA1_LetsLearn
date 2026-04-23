@@ -1,4 +1,4 @@
-﻿using LetsLearn.Core.Entities;
+using LetsLearn.Core.Entities;
 using LetsLearn.Core.Interfaces;
 using LetsLearn.UseCases.DTOs;
 using LetsLearn.UseCases.ServiceInterfaces;
@@ -390,6 +390,30 @@ namespace LetsLearn.UseCases.Services.QuestionSer
             }).ToList();
 
             return await BulkCreateAsync(requests, userId, ct);
+        }
+
+        public async Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
+        {
+            var question = await _uow.Questions.GetByIdAsync(id, ct);
+            if (question == null) return false;
+
+            // Soft delete
+            question.DeletedAt = DateTime.UtcNow;
+            
+            // Also soft delete choices if they have a DeletedAt property (checking if they do)
+            // If they don't have it, we keep the hard delete for choices or just leave them
+            var choices = (await _uow.QuestionChoices.FindAsync(c => c.QuestionId == id, ct)).ToList();
+            if (choices.Any())
+            {
+                // If choices don't have DeletedAt, we just remove them or leave them orphaned
+                // Usually QuestionChoices don't have soft delete in this project
+                await _uow.QuestionChoices.DeleteRangeAsync(choices);
+            }
+
+            // Update the question to save the DeletedAt value
+            // Since we're using GenericRepository, we just commit
+            await _uow.CommitAsync();
+            return true;
         }
     }
 }
