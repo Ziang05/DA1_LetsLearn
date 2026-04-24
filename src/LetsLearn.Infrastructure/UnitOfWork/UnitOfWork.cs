@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -44,6 +44,7 @@ namespace LetsLearn.Infrastructure.UnitOfWork
         public IRepository<TopicQuizQuestionChoice> TopicQuizQuestionChoices { get; private set; }
         public IEnrollmentRepository Enrollments { get; private set; }
         public INotificationRepository Notifications { get; }
+        public IRepository<Payment> Payments { get; private set; }
         public UnitOfWork(LetsLearnContext context, ILogger<QuestionRepository> questionLogger)
         {
             _context = context;
@@ -73,6 +74,7 @@ namespace LetsLearn.Infrastructure.UnitOfWork
             TopicQuizQuestions = new TopicQuizQuestionRepository(_context);
             TopicQuizQuestionChoices = new TopicQuizQuestionChoiceRepository(_context);
             Notifications = new NotificationRepository(_context);
+            Payments = new GenericRepository<Payment>(_context);
         }
 
         public async Task<int> CommitAsync() =>

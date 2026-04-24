@@ -1,4 +1,4 @@
-﻿using LetsLearn.Infrastructure.Data;
+using LetsLearn.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;

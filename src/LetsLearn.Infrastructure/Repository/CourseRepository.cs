@@ -1,4 +1,4 @@
-﻿using LetsLearn.Core.Entities;
+using LetsLearn.Core.Entities;
 using LetsLearn.Core.Interfaces;
 using LetsLearn.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +19,7 @@ namespace LetsLearn.Infrastructure.Repository
         {
             return await _dbSet.Include(c => c.Sections)
                                .ThenInclude(s => s.Topics)
+                               .AsTracking()
                                .FirstOrDefaultAsync(c => c.Id == id, ct);
         }
 

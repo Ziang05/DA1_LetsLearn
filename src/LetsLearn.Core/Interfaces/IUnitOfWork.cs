@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -34,6 +34,7 @@ namespace LetsLearn.Core.Interfaces
         IRepository<TopicQuizQuestionChoice> TopicQuizQuestionChoices { get; }
         IEnrollmentRepository Enrollments { get; }
         INotificationRepository Notifications { get; }
+        IRepository<Payment> Payments { get; }
         Task<int> CommitAsync();
     }
 }

@@ -1,10 +1,11 @@
-﻿using LetsLearn.Core.Entities;
+using LetsLearn.Core.Entities;
 using LetsLearn.Core.Interfaces;
 using LetsLearn.Infrastructure.Repository;
 using LetsLearn.Infrastructure.UnitOfWork;
 using LetsLearn.UseCases.DTOs;
 using LetsLearn.UseCases.ServiceInterfaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -19,14 +20,16 @@ namespace LetsLearn.UseCases.Services.CourseSer
     {
         private readonly IUnitOfWork _uow;
         private readonly ITopicService _topicService;
+        private readonly ILogger<CourseService> _logger;
 
         private static readonly DateTime MIN = DateTime.SpecifyKind(DateTime.MinValue.AddYears(1), DateTimeKind.Utc);
         private static readonly DateTime MAX = DateTime.SpecifyKind(DateTime.MaxValue.AddYears(-1), DateTimeKind.Utc);
 
-        public CourseService(IUnitOfWork uow, ITopicService topicService)
+        public CourseService(IUnitOfWork uow, ITopicService topicService, ILogger<CourseService> logger)
         {
             _uow = uow;
             _topicService = topicService;
+            _logger = logger;
         }
 
         // =============== CREATE / UPDATE ===============
@@ -125,6 +128,11 @@ namespace LetsLearn.UseCases.Services.CourseSer
             course.Category = dto.Category;
             course.Level = dto.Level;
             course.IsPublished = dto.IsPublished ?? course.IsPublished;
+            
+            if (dto.Price.HasValue)
+            {
+                course.Price = dto.Price.Value;
+            }
 
             try
             {
@@ -181,12 +189,15 @@ namespace LetsLearn.UseCases.Services.CourseSer
             if (!userExists) throw new KeyNotFoundException("User not found.");
 
             var enrollments = await _uow.Enrollments.GetByStudentId(userId, ct);
-
             var courseIds = enrollments.Select(e => e.CourseId).Distinct();
-
             var courses = await _uow.Course.GetByIdsAsync(courseIds);
 
-            return courses.Where(c => c != null).Select(c => MapToResponse(c!)).ToList();
+            var results = new List<GetCourseResponse>();
+            foreach (var course in courses.Where(c => c != null))
+            {
+                results.Add(await MapToResponseAsync(course!));
+            }
+            return results;
         }
 
         // Test Case Estimation:
@@ -195,40 +206,60 @@ namespace LetsLearn.UseCases.Services.CourseSer
         // D = 1 => Minimum Test Cases = D + 1 = 2
         public async Task<GetCourseResponse> GetCourseByIdAsync(String id, CancellationToken ct = default)
         {
-            // Query course như cũ - KHÔNG thay đổi
             var course = await _uow.Course.GetByIdAsync(id, ct)
                          ?? throw new KeyNotFoundException("Course not found.");
 
-            // Query riêng creator
-            var creator = await _uow.Users.GetByIdAsync(course.CreatorId, ct);
-
-            // Query riêng enrollments
-            var enrollments = await _uow.Enrollments.FindAsync(e => e.CourseId == id, ct);
-            var studentIds = enrollments.Where(e => e.StudentId != course.CreatorId)
-                                      .Select(e => e.StudentId)
-                                      .ToList();
-
-            // Query riêng students
-            var students = new List<UserBasicInfo>();
-            if (studentIds.Any())
+            try 
             {
-                foreach (var studentId in studentIds)
+                // Use the Async mapper to get full topic data
+                var response = await MapToResponseAsync(course);
+
+                // Query separately for creator
+                var creator = await _uow.Users.GetByIdAsync(course.CreatorId, ct);
+
+                // Query separately for enrollments to get students
+                var enrollments = await _uow.Enrollments.FindAsync(e => e.CourseId == id, ct);
+                var studentIds = enrollments.Where(e => e.StudentId != course.CreatorId)
+                                          .Select(e => e.StudentId)
+                                          .ToList();
+
+                var students = new List<UserBasicInfo>();
+                if (studentIds.Any())
                 {
-                    var student = await _uow.Users.GetByIdAsync(studentId, ct);
-                    if (student != null)
+                    foreach (var studentId in studentIds)
                     {
-                        students.Add(new UserBasicInfo
+                        var student = await _uow.Users.GetByIdAsync(studentId, ct);
+                        if (student != null)
                         {
-                            Id = student.Id,
-                            Username = student.Username,
-                            Avatar = student.Avatar
-                        });
+                            students.Add(new UserBasicInfo
+                            {
+                                Id = student.Id,
+                                Username = student.Username,
+                                Avatar = student.Avatar
+                            });
+                        }
                     }
                 }
-            }
 
-            return MapToResponseWithUsers(course, creator, students);
+                response.Creator = creator != null ? new UserBasicInfo
+                {
+                    Id = creator.Id,
+                    Username = creator.Username,
+                    Avatar = creator.Avatar
+                } : null;
+
+                response.Students = students;
+
+                return response;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error mapping course details for course {CourseId}", id);
+                // Fallback to simpler mapping if complex mapping fails
+                return MapToResponseWithUsers(course, null, new List<UserBasicInfo>());
+            }
         }
+
         // Helper method mapping đơn giản
         private GetCourseResponse MapToResponseWithUsers(Course c, User? creator, List<UserBasicInfo> students)
         {
@@ -264,6 +295,22 @@ namespace LetsLearn.UseCases.Services.CourseSer
             var enrollmentExists = await _uow.Enrollments.ExistsAsync(e => e.CourseId == courseId && e.StudentId == userId, ct);
             if (enrollmentExists)
                 throw new InvalidOperationException("User is already enrolled in this course.");
+
+            // Check if course has a price and verify payment
+            if (course.Price.HasValue && course.Price.Value > 0)
+            {
+                var isCreator = course.CreatorId == userId;
+                if (!isCreator)
+                {
+                    var payment = (await _uow.Payments.FindAsync(p => 
+                        p.UserId == userId && 
+                        p.CourseId == courseId && 
+                        p.Status == "Success", ct)).FirstOrDefault();
+                    
+                    if (payment == null)
+                        throw new InvalidOperationException("Payment required to join this course.");
+                }
+            }
 
             var enrollment = new Enrollment
             {
@@ -794,7 +841,7 @@ namespace LetsLearn.UseCases.Services.CourseSer
         // D = 0 => Minimum Test Cases = D + 1 = 1 (basic mapping)
         private async Task<GetCourseResponse> MapToResponseAsync(Course c)
         {
-            return new GetCourseResponse
+            var response = new GetCourseResponse
             {
                 Id = c.Id,
                 CreatorId = c.CreatorId,
@@ -806,27 +853,50 @@ namespace LetsLearn.UseCases.Services.CourseSer
                 Category = c.Category,
                 Level = c.Level,
                 IsPublished = c.IsPublished,
+                Sections = new List<SectionResponse>()
+            };
 
-                Sections = (await Task.WhenAll(
-                    c.Sections.Select(async s => new SectionResponse
+            if (c.Sections != null)
+            {
+                foreach (var s in c.Sections.OrderBy(sec => sec.Position))
+                {
+                    var sectionResponse = new SectionResponse
                     {
                         Id = s.Id,
                         CourseId = c.Id,
                         Position = s.Position,
                         Title = s.Title,
                         Description = s.Description,
+                        Topics = new List<TopicResponse>()
+                    };
 
-                        Topics = (await Task.WhenAll(
-                            s.Topics.Select(async t =>
+                    if (s.Topics != null)
+                    {
+                        foreach (var t in s.Topics)
+                        {
+                            try
                             {
-                                // Dùng TopicService để lấy DATA đầy đủ
-                                return await _topicService.GetTopicByIdAsync(t.Id);
-                            })
-                        )).ToList()
-                    })
-                ))
-                .ToList()
-            };
+                                var topicData = await _topicService.GetTopicByIdAsync(t.Id);
+                                sectionResponse.Topics.Add(topicData);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "Failed to fetch topic {TopicId} during course mapping", t.Id);
+                                sectionResponse.Topics.Add(new TopicResponse { 
+                                    Id = t.Id, 
+                                    Title = t.Title, 
+                                    Type = t.Type, 
+                                    SectionId = t.SectionId 
+                                });
+                            }
+                        }
+                    }
+
+                    response.Sections.Add(sectionResponse);
+                }
+            }
+
+            return response;
         }
 
         private static GetCourseResponse MapToResponse(Course c)

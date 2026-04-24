@@ -111,6 +111,13 @@ builder.Services.AddScoped<ISectionService, SectionService>();
 builder.Services.AddScoped<ITopicService, TopicService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<ICourseCloneService, CourseCloneService>();
+builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IMediaService>(sp => {
+    var env = sp.GetRequiredService<IWebHostEnvironment>();
+    var rootPath = env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+    var uploadPath = Path.Combine(rootPath, "uploads");
+    return new MediaService(uploadPath);
+});
 
 builder.Services.AddSingleton<CourseFactory>();
 
@@ -131,7 +138,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend",
         builder => builder
-            .WithOrigins("http://localhost:4200", "http://localhost:3000") // FE port
+            .WithOrigins("http://localhost:4200", "http://localhost:3000", "http://localhost:3001") // FE port
             .AllowAnyHeader()
             .AllowAnyMethod()
             .SetIsOriginAllowed(origin => true)
@@ -152,6 +159,23 @@ await using (var scope = app.Services.CreateAsyncScope())
     var services = scope.ServiceProvider;
     var dbContext = services.GetRequiredService<LetsLearnContext>();
     dbContext.Database.EnsureCreated();
+    
+    // Ensure Payments table exists (EnsureCreated won't add it if DB already exists)
+    var createPaymentsSql = @"
+        CREATE TABLE IF NOT EXISTS ""Payments"" (
+            ""Id"" uuid NOT NULL,
+            ""UserId"" uuid NOT NULL,
+            ""CourseId"" text NOT NULL,
+            ""Amount"" numeric NOT NULL,
+            ""Description"" text,
+            ""OrderId"" text,
+            ""TransactionId"" text,
+            ""Status"" text NOT NULL,
+            ""CreatedAt"" timestamp with time zone NOT NULL,
+            ""PaidAt"" timestamp with time zone,
+            CONSTRAINT ""PK_Payments"" PRIMARY KEY (""Id"")
+        );";
+    await dbContext.Database.ExecuteSqlRawAsync(createPaymentsSql);
 
     // Seed admin user
     var authService = services.GetRequiredService<IAuthService>();
@@ -187,6 +211,8 @@ await using (var scope = app.Services.CreateAsyncScope())
 }
 
 app.UseCors("AllowFrontend");
+
+app.UseStaticFiles(); // Enable local file serving for uploads
 
 app.UseAuthentication();
 

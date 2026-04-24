@@ -1,4 +1,4 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -48,14 +48,27 @@ namespace LetsLearn.API.Middleware
             }
 
             var accessTokenCookie = context.Request.Cookies["ACCESS_TOKEN"];
+            string? token = null;
+
             if (!string.IsNullOrEmpty(accessTokenCookie) && accessTokenCookie.StartsWith("Bearer_"))
             {
-                var token = accessTokenCookie.Substring("Bearer_".Length);
+                token = accessTokenCookie.Substring("Bearer_".Length);
+            }
+            else if (context.Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                var headerValue = authHeader.ToString();
+                if (headerValue.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                {
+                    token = headerValue.Substring("Bearer ".Length).Trim();
+                }
+            }
 
+            if (!string.IsNullOrEmpty(token))
+            {
                 try
                 {
                     var tokenHandler = new JwtSecurityTokenHandler();
-                    var key = Encoding.ASCII.GetBytes(_secret);
+                    var key = Encoding.UTF8.GetBytes(_secret);
                     tokenHandler.ValidateToken(token, new TokenValidationParameters
                     {
                         ValidateIssuerSigningKey = true,
@@ -67,7 +80,6 @@ namespace LetsLearn.API.Middleware
                     }, out var validatedToken);
 
                     var jwtToken = (JwtSecurityToken)validatedToken;
-                    //var identity = new ClaimsIdentity(jwtToken.Claims, "jwt");
                     var claims = jwtToken.Claims.Select(c =>
                     {
                         if (c.Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/role")

@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -41,6 +41,7 @@ namespace LetsLearn.Infrastructure.Data
         public DbSet<QuizResponseAnswer> QuizResponseAnswers { get; set; }
         public DbSet<User> Users { get; set; }
         public DbSet<RefreshToken> RefreshTokens { get; set; }
+        public DbSet<Payment> Payments { get; set; }
         #endregion
 
         #region OnModelCreating

@@ -301,49 +301,47 @@ namespace LetsLearn.UseCases.Services
                     {
                         _logger.LogInformation("Processing file update. Raw data: {RawData}", raw);
 
-                        var fileReq = JsonSerializer.Deserialize<UpdateTopicFileRequest>(raw, options);
+                        // Use CreateTopicFileRequest as the DTO for the JSON content of 'data'
+                        var fileDataReq = JsonSerializer.Deserialize<CreateTopicFileRequest>(raw, options);
 
-                        _logger.LogInformation("Deserialized file request - Description: {Description}, File: {HasFile}",
-                            fileReq?.Description, fileReq?.File != null);
+                        _logger.LogInformation("Deserialized file request - Description: {Description}, HasFile: {HasFile}",
+                            fileDataReq?.Description, fileDataReq?.File != null);
 
-                        var file = (await _unitOfWork.TopicFiles.FindAsync(f => f.TopicId == topic.Id, ct)).FirstOrDefault()
+                        var topicFile = (await _unitOfWork.TopicFiles.FindAsync(f => f.TopicId == topic.Id, ct)).FirstOrDefault()
                                    ?? throw new KeyNotFoundException("TopicFile not found.");
 
-                        file.Description = fileReq?.Description ?? file.Description;
+                        topicFile.Description = fileDataReq?.Description ?? topicFile.Description;
 
                         // Update file data
-                        if (fileReq?.File != null)
+                        if (fileDataReq?.File != null)
                         {
-                            _logger.LogInformation("Updating file data - ID: {FileId}, Name: {FileName}",
-                                fileReq.File.Id, fileReq.File.Name);
+                            _logger.LogInformation("Updating file data - Name: {FileName}, Url: {Url}",
+                                fileDataReq.File.Name, fileDataReq.File.DownloadUrl);
 
-                            // Remove existing file for this topic (if any)
+                            // 1. Remove existing files for this topic
                             var existingFiles = await _unitOfWork.CloudinaryFiles.FindAsync(cf => cf.TopicFileId == topic.Id, ct);
                             if (existingFiles.Any())
                             {
                                 await _unitOfWork.CloudinaryFiles.DeleteRangeAsync(existingFiles);
                             }
 
-                            // Add new file
+                            // 2. Create new CloudinaryFile entity
                             var cloudinaryFile = new CloudinaryFile
                             {
-                                Id = fileReq.File.Id ?? Guid.NewGuid(),
-                                Name = fileReq.File.Name,
-                                DisplayUrl = fileReq.File.DisplayUrl,
-                                DownloadUrl = fileReq.File.DownloadUrl,
+                                Id = Guid.NewGuid(),
+                                Name = fileDataReq.File.Name,
+                                DisplayUrl = fileDataReq.File.DisplayUrl,
+                                DownloadUrl = fileDataReq.File.DownloadUrl,
                                 TopicFileId = topic.Id
                             };
 
-                            file.File = cloudinaryFile;  // Set single file
+                            // 3. Link and Add
+                            topicFile.File = cloudinaryFile;
                             await _unitOfWork.CloudinaryFiles.AddAsync(cloudinaryFile);
-
-                            _logger.LogInformation("Added new CloudinaryFile with ID: {CloudinaryFileId}", cloudinaryFile.Id);
                         }
 
-                        await _unitOfWork.TopicFiles.UpdateAsync(file);
-                        topicData = file;
-
-                        _logger.LogInformation("File update completed successfully for TopicFile ID: {TopicId}", topic.Id);
+                            await _unitOfWork.TopicFiles.UpdateAsync(topicFile);
+                        topicData = topicFile;
                         break;
                     }
 
@@ -352,8 +350,9 @@ namespace LetsLearn.UseCases.Services
                         var linkReq = JsonSerializer.Deserialize<UpdateTopicLinkRequest>(raw, options);
                         var link = (await _unitOfWork.TopicLinks.FindAsync(l => l.TopicId == topic.Id, ct)).FirstOrDefault()
                                    ?? throw new KeyNotFoundException("TopicLink not found.");
-                        link.Description = linkReq.Description ?? link.Description;
-                        link.Url = linkReq.Url ?? link.Url;
+
+                        link.Url = linkReq?.Url ?? link.Url;
+                        link.Description = linkReq?.Description ?? link.Description;
                         await _unitOfWork.TopicLinks.UpdateAsync(link);
                         topicData = link;
                         break;
@@ -757,8 +756,9 @@ namespace LetsLearn.UseCases.Services
                 _logger.LogInformation("Fetching topic {TopicId} of type {Type}", id, topic.Type);
 
                 object? topicData = null;
+                string type = topic.Type?.ToLower() ?? "unknown";
 
-                switch (topic.Type!.ToLower())
+                switch (type)
                 {
                     case "quiz":
                         var quiz = await _unitOfWork.TopicQuizzes.GetWithQuestionsAsync(topic.Id);
