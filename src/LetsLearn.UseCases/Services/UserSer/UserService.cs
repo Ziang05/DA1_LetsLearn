@@ -1,4 +1,4 @@
-﻿using LetsLearn.Core.Entities;
+using LetsLearn.Core.Entities;
 using LetsLearn.Core.Interfaces;
 using LetsLearn.UseCases.DTOs;
 using LetsLearn.UseCases.ServiceInterfaces;
@@ -210,7 +210,7 @@ namespace LetsLearn.UseCases.Services.UserSer
                 CreatorId = creator?.Id ?? course.CreatorId,
                 Title = course.Title,
                 Description = course.Description,
-                TotalJoined = students.Count,
+                TotalJoined = students.Count(s => s.Id != course.CreatorId),
                 ImageUrl = course.ImageUrl,
                 Price = course.Price,
                 Category = course.Category,
@@ -419,7 +419,8 @@ namespace LetsLearn.UseCases.Services.UserSer
 
             // Cập nhật tổng số học viên của khóa học
             var course = await _unitOfWork.Course.GetByIdAsync(courseId, ct);
-            if (course != null && course.TotalJoined > 0)
+            var user = await _unitOfWork.Users.GetByIdAsync(userId, ct);
+            if (course != null && user != null && user.Role.ToLower() == "learner" && course.TotalJoined > 0)
             {
                 course.TotalJoined -= 1;
             }

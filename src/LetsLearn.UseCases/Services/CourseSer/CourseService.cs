@@ -64,7 +64,7 @@ namespace LetsLearn.UseCases.Services.CourseSer
                 Price = dto.Price,
                 IsPublished = dto.IsPublished ?? false,
                 CreatorId = userId,
-                TotalJoined = 1
+                TotalJoined = 0
             };
 
             await _uow.Course.AddAsync(course);
@@ -165,8 +165,25 @@ namespace LetsLearn.UseCases.Services.CourseSer
         // D = 0 => Minimum Test Cases = D + 1 = 1
         public async Task<IEnumerable<GetCourseResponse>> GetAllCoursesAsync(CancellationToken ct = default)
         {
-            var courses = await _uow.Course.GetAllCoursesByIsPublishedTrue();
-            return courses.Where(c => c != null).Select(c => MapToResponse(c!)).ToList();
+            var courses = (await _uow.Course.GetAllCoursesByIsPublishedTrue()).Where(c => c != null).Select(c => c!).ToList();
+            
+            // Fix student counts based on role
+            var courseIds = courses.Select(c => c.Id).ToList();
+            var counts = await _uow.Enrollments.GetStudentCountsByRoleAsync(courseIds, ct);
+            
+            foreach (var course in courses)
+            {
+                if (counts.TryGetValue(course.Id, out int count))
+                {
+                    course.TotalJoined = count;
+                }
+                else
+                {
+                    course.TotalJoined = 0;
+                }
+            }
+
+            return courses.Select(c => MapToResponse(c)).ToList();
         }
 
         // Test Case Estimation:
@@ -175,8 +192,24 @@ namespace LetsLearn.UseCases.Services.CourseSer
         // D = 0 => Minimum Test Cases = D + 1 = 1
         public async Task<IEnumerable<GetCourseResponse>> GetAllCoursesForAdminAsync(CancellationToken ct = default)
         {
-            var courses = await _uow.Course.GetAllAsync(ct);
-            return courses.Where(c => c != null).Select(c => MapToResponse(c!)).ToList();
+            var courses = (await _uow.Course.GetAllAsync(ct)).Where(c => c != null).Select(c => c!).ToList();
+            
+            var courseIds = courses.Select(c => c.Id).ToList();
+            var counts = await _uow.Enrollments.GetStudentCountsByRoleAsync(courseIds, ct);
+            
+            foreach (var course in courses)
+            {
+                if (counts.TryGetValue(course.Id, out int count))
+                {
+                    course.TotalJoined = count;
+                }
+                else
+                {
+                    course.TotalJoined = 0;
+                }
+            }
+
+            return courses.Select(c => MapToResponse(c)).ToList();
         }
 
         // Test Case Estimation:
@@ -218,28 +251,27 @@ namespace LetsLearn.UseCases.Services.CourseSer
                 var creator = await _uow.Users.GetByIdAsync(course.CreatorId, ct);
 
                 // Query separately for enrollments to get students
-                var enrollments = await _uow.Enrollments.FindAsync(e => e.CourseId == id, ct);
-                var studentIds = enrollments.Where(e => e.StudentId != course.CreatorId)
-                                          .Select(e => e.StudentId)
-                                          .ToList();
-
+                var enrollments = await _uow.Enrollments.GetAllByCourseIdAsync(id, ct);
+                
                 var students = new List<UserBasicInfo>();
-                if (studentIds.Any())
+                int learnerCount = 0;
+
+                foreach (var enrollment in enrollments)
                 {
-                    foreach (var studentId in studentIds)
+                    var student = await _uow.Users.GetByIdAsync(enrollment.StudentId, ct);
+                    if (student != null && (student.Role.ToLower() == "student" || student.Role.ToLower() == "learner"))
                     {
-                        var student = await _uow.Users.GetByIdAsync(studentId, ct);
-                        if (student != null)
+                        learnerCount++;
+                        students.Add(new UserBasicInfo
                         {
-                            students.Add(new UserBasicInfo
-                            {
-                                Id = student.Id,
-                                Username = student.Username,
-                                Avatar = student.Avatar
-                            });
-                        }
+                            Id = student.Id,
+                            Username = student.Username,
+                            Avatar = student.Avatar
+                        });
                     }
                 }
+
+                response.TotalJoined = learnerCount;
 
                 response.Creator = creator != null ? new UserBasicInfo
                 {
@@ -320,8 +352,11 @@ namespace LetsLearn.UseCases.Services.CourseSer
             };
 
             await _uow.Enrollments.AddAsync(enrollment);
-
-            course.TotalJoined += 1;
+            
+            if (user.Role.ToLower() == "student" || user.Role.ToLower() == "learner")
+            {
+                course.TotalJoined += 1;
+            }
 
             try
             {

@@ -1,4 +1,4 @@
-﻿using LetsLearn.Core.Entities;
+using LetsLearn.Core.Entities;
 using LetsLearn.Core.Interfaces;
 using LetsLearn.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -69,6 +69,30 @@ namespace LetsLearn.Infrastructure.Repository
             return await _context.Enrollments
                                  .Where(e => e.StudentId == studentId)
                                  .ToListAsync(ct);
+        }
+        public async Task<int> GetStudentCountByRoleAsync(string courseId, CancellationToken ct = default)
+        {
+            return await _context.Enrollments
+                .Where(e => e.CourseId == courseId)
+                .Join(_context.Users,
+                      e => e.StudentId,
+                      u => u.Id,
+                      (e, u) => u)
+                .CountAsync(u => u.Role.ToLower() == "student" || u.Role.ToLower() == "learner", ct);
+        }
+
+        public async Task<Dictionary<string, int>> GetStudentCountsByRoleAsync(IEnumerable<string> courseIds, CancellationToken ct = default)
+        {
+            return await _context.Enrollments
+                .Where(e => courseIds.Contains(e.CourseId))
+                .Join(_context.Users,
+                      e => e.StudentId,
+                      u => u.Id,
+                      (e, u) => new { e.CourseId, u.Role })
+                .Where(x => x.Role.ToLower() == "student" || x.Role.ToLower() == "learner")
+                .GroupBy(x => x.CourseId)
+                .Select(g => new { CourseId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.CourseId, x => x.Count, ct);
         }
     }
 }

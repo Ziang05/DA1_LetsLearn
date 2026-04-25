@@ -1,4 +1,4 @@
-﻿using LetsLearn.Core.Entities;
+using LetsLearn.Core.Entities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -24,5 +24,7 @@ namespace LetsLearn.Core.Interfaces
         Task DeleteByStudentIdAndCourseIdAsync(Guid studentId, String courseId, CancellationToken ct = default);
 
         Task<List<Enrollment>> GetByStudentId(Guid studentId, CancellationToken ct = default);
+        Task<int> GetStudentCountByRoleAsync(string courseId, CancellationToken ct = default);
+        Task<Dictionary<string, int>> GetStudentCountsByRoleAsync(IEnumerable<string> courseIds, CancellationToken ct = default);
     }
 }
