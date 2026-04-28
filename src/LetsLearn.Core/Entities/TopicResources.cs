@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -33,6 +33,7 @@ namespace LetsLearn.Core.Entities
         public string? Description { get; set; }
         public DateTime? Open { get; set; }
         public DateTime? Close { get; set; }
+        public string? MeetingLink { get; set; } // Google Meet / Zoom / Teams link
         public ICollection<TopicMeetingHistory> Histories { get; set; } = new List<TopicMeetingHistory>();
     }
 

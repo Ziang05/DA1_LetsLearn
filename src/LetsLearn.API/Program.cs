@@ -1,3 +1,4 @@
+using LetsLearn.API.BackgroundServices;
 using LetsLearn.API.Middleware;
 using LetsLearn.Core.Interfaces;
 using LetsLearn.Infrastructure.Data;
@@ -31,6 +32,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 
 builder.Services.AddControllers();
+builder.Services.AddHttpContextAccessor();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -112,12 +114,10 @@ builder.Services.AddScoped<ITopicService, TopicService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<ICourseCloneService, CourseCloneService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
-builder.Services.AddScoped<IMediaService>(sp => {
-    var env = sp.GetRequiredService<IWebHostEnvironment>();
-    var rootPath = env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-    var uploadPath = Path.Combine(rootPath, "uploads");
-    return new MediaService(uploadPath);
-});
+builder.Services.AddScoped<IMediaService, MediaService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
+
+builder.Services.AddHostedService<DeadlineReminderBackgroundService>();
 
 builder.Services.AddSingleton<CourseFactory>();
 

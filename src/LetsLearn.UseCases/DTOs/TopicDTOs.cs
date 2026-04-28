@@ -1,4 +1,4 @@
-﻿using LetsLearn.Core.Entities;
+using LetsLearn.Core.Entities;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -215,6 +215,7 @@ namespace LetsLearn.UseCases.DTOs
         public string? Description { get; set; }
         public DateTime? Open { get; set; }
         public DateTime? Close { get; set; }
+        public string? MeetingLink { get; set; }
     }
 
     public class SaveMeetingHistoryRequest

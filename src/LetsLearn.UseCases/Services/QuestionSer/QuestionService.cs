@@ -397,6 +397,17 @@ namespace LetsLearn.UseCases.Services.QuestionSer
             var question = await _uow.Questions.GetByIdAsync(id, ct);
             if (question == null) return false;
 
+            // Check if the question is used in any TopicQuiz
+            // Since TopicQuizQuestion is a copy, we match by QuestionText and Type (consistent with QuizResponseService matching logic)
+            var isUsedInQuiz = await _uow.TopicQuizQuestions.ExistsAsync(tqq => 
+                tqq.QuestionText == question.QuestionText && 
+                tqq.Type == question.Type, ct);
+
+            if (isUsedInQuiz)
+            {
+                throw new InvalidOperationException("Câu hỏi này đang được sử dụng trong một hoặc nhiều bài kiểm tra (Quiz) và không thể xóa.");
+            }
+
             // Soft delete
             question.DeletedAt = DateTime.UtcNow;
             

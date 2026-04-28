@@ -179,6 +179,11 @@ namespace LetsLearn.WebApi.Controllers
                 _logger.LogInformation("Question {QuestionId} deleted successfully", id);
                 return Ok(new { message = "Question deleted successfully." });
             }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Validation error deleting question {QuestionId}", id);
+                return BadRequest(new { message = ex.Message });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error deleting question {QuestionId}", id);

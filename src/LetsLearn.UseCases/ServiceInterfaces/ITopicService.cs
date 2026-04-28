@@ -1,4 +1,4 @@
-﻿using LetsLearn.UseCases.DTOs;
+using LetsLearn.UseCases.DTOs;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,6 +16,6 @@ namespace LetsLearn.UseCases.ServiceInterfaces
         Task<SingleQuizReportDTO> GetSingleQuizReportAsync(String courseId, Guid topicId, CancellationToken ct = default);
         Task<SingleAssignmentReportDTO> GetSingleAssignmentReportAsync(String courseId, Guid topicId, CancellationToken ct = default);
         Task<bool> SaveMeetingHistoryAsync(Guid topicId, SaveMeetingHistoryRequest request, CancellationToken ct = default);
-
+        Task<int> NotifyStudentsAsync(Guid topicId, CancellationToken ct = default);
     }
 }

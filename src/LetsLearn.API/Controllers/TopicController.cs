@@ -1,4 +1,4 @@
-﻿using LetsLearn.UseCases.DTOs;
+using LetsLearn.UseCases.DTOs;
 using LetsLearn.UseCases.ServiceInterfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -239,6 +239,34 @@ namespace LetsLearn.API.Controllers
             {
                 _logger.LogError(ex, "Error saving meeting history for topic {TopicId}", id);
                 return StatusCode(StatusCodes.Status500InternalServerError, "Failed to save meeting history");
+            }
+        }
+
+        // POST /course/{courseId}/topic/{id}/notify
+        [HttpPost("{id:guid}/notify")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> NotifyStudents(
+            [FromRoute] string courseId,
+            [FromRoute] Guid id,
+            CancellationToken ct)
+        {
+            try
+            {
+                _logger.LogInformation("Sending student notifications for topic {TopicId} in course {CourseId}", id, courseId);
+
+                var count = await _topicService.NotifyStudentsAsync(id, ct);
+
+                return Ok(new { message = $"Notification sent to {count} student(s).", count });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { message = "Topic not found." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending notifications for topic {TopicId}", id);
+                return StatusCode(StatusCodes.Status500InternalServerError, "Failed to send notifications");
             }
         }
     }

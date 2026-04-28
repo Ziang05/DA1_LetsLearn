@@ -18,10 +18,13 @@ namespace LetsLearn.UseCases.Services
     {
         private readonly IUnitOfWork _unitOfWork;
         private readonly ILogger<TopicService> _logger;
-        public TopicService(IUnitOfWork unitOfWork, ILogger<TopicService> logger)
+        private readonly IEmailService _emailService;
+
+        public TopicService(IUnitOfWork unitOfWork, ILogger<TopicService> logger, IEmailService emailService)
         {
             _unitOfWork = unitOfWork;
             _logger = logger;
+            _emailService = emailService;
         }
 
         // Test Case Estimation:
@@ -214,7 +217,8 @@ namespace LetsLearn.UseCases.Services
                                 TopicId = topic.Id,
                                 Description = meetingReq?.Description,
                                 Open = meetingReq?.Open,
-                                Close = meetingReq?.Close
+                                Close = meetingReq?.Close,
+                                MeetingLink = null
                             };
                             await _unitOfWork.TopicMeetings.AddAsync(meeting);
                             topicData = meeting;
@@ -244,6 +248,119 @@ namespace LetsLearn.UseCases.Services
                 _logger.LogError(ex, "Error creating topic of type {Type}", request?.Type);
                 throw;
             }
+        }
+
+        // Notify enrolled students when a new assignment/quiz/meeting is created
+        private async Task NotifyStudentsAsync(Guid sectionId, string topicTitle, string topicType,
+            DateTime? openDate, DateTime? closeDate)
+        {
+            try
+            {
+                var section = await _unitOfWork.Sections.GetByIdAsync(sectionId);
+                if (section == null) return;
+
+                var course = await _unitOfWork.Course.GetByIdAsync(section.CourseId);
+                if (course == null) return;
+
+                var enrollments = await _unitOfWork.Enrollments.GetAllByCourseIdAsync(section.CourseId);
+
+                foreach (var enrollment in enrollments)
+                {
+                    var student = await _unitOfWork.Users.GetByIdAsync(enrollment.StudentId);
+                    if (student == null) continue;
+
+                    var role = student.Role?.ToLower();
+                    if (role != "student" && role != "learner") continue;
+
+                    if (string.IsNullOrEmpty(student.Email)) continue;
+
+                    await _emailService.SendNewTopicNotificationAsync(
+                        student.Email,
+                        student.Username ?? "Student",
+                        course.Title ?? "Your course",
+                        topicTitle,
+                        topicType,
+                        openDate,
+                        closeDate
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send topic notification emails for '{TopicTitle}'", topicTitle);
+            }
+        }
+
+        // Public: called by controller when teacher clicks "Notify Students"
+        public async Task<int> NotifyStudentsAsync(Guid topicId, CancellationToken ct = default)
+        {
+            var topic = await _unitOfWork.Topics.GetByIdAsync(topicId);
+            if (topic == null) throw new KeyNotFoundException("Topic not found.");
+
+            var section = await _unitOfWork.Sections.GetByIdAsync(topic.SectionId);
+            if (section == null) throw new KeyNotFoundException("Section not found.");
+
+            var course = await _unitOfWork.Course.GetByIdAsync(section.CourseId);
+            if (course == null) throw new KeyNotFoundException("Course not found.");
+
+            // Get open/close date from topic data
+            DateTime? openDate = null;
+            DateTime? closeDate = null;
+            var topicType = topic.Type?.ToLower();
+
+            if (topicType == "assignment")
+            {
+                var assignment = (await _unitOfWork.TopicAssignments.FindAsync(a => a.TopicId == topicId)).FirstOrDefault();
+                openDate = assignment?.Open;
+                closeDate = assignment?.Close;
+            }
+            else if (topicType == "quiz")
+            {
+                var quiz = (await _unitOfWork.TopicQuizzes.FindAsync(q => q.TopicId == topicId)).FirstOrDefault();
+                openDate = quiz?.Open;
+                closeDate = quiz?.Close;
+            }
+            else if (topicType == "meeting")
+            {
+                var meeting = (await _unitOfWork.TopicMeetings.FindAsync(m => m.TopicId == topicId)).FirstOrDefault();
+                openDate = meeting?.Open;
+                closeDate = meeting?.Close;
+            }
+
+            var enrollments = await _unitOfWork.Enrollments.GetAllByCourseIdAsync(section.CourseId);
+            int sentCount = 0;
+
+            foreach (var enrollment in enrollments)
+            {
+                var student = await _unitOfWork.Users.GetByIdAsync(enrollment.StudentId);
+                if (student == null) continue;
+
+                var role = student.Role?.ToLower();
+                if (role != "student" && role != "learner") continue;
+
+                if (string.IsNullOrEmpty(student.Email)) continue;
+
+                try
+                {
+                    await _emailService.SendNewTopicNotificationAsync(
+                        student.Email,
+                        student.Username ?? "Student",
+                        course.Title ?? "Your course",
+                        topic.Title ?? "New activity",
+                        topic.Type ?? topicType,
+                        openDate,
+                        closeDate
+                    );
+                    sentCount++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to send email to {Email}", student.Email);
+                }
+            }
+
+            _logger.LogInformation("Sent {Count} notification(s) for topic {TopicId}", sentCount, topicId);
+            return sentCount;
         }
 
         // Test Case Estimation:
@@ -574,6 +691,7 @@ namespace LetsLearn.UseCases.Services
                         meeting.Description = meetingReq.Description ?? meeting.Description;
                         meeting.Open = meetingReq.Open ?? meeting.Open;
                         meeting.Close = meetingReq.Close ?? meeting.Close;
+                        meeting.MeetingLink = meetingReq.MeetingLink ?? meeting.MeetingLink;
 
                         await _unitOfWork.TopicMeetings.UpdateAsync(meeting);
                         topicData = meeting;

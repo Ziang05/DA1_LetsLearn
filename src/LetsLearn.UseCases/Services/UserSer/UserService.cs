@@ -198,6 +198,34 @@ namespace LetsLearn.UseCases.Services.UserSer
                 }
             }
 
+            // Fetch responses for the user to determine if they are done
+            var quizTopicIds = result.Where(t => t.Type?.ToLower() == "quiz").Select(t => t.Id).ToList();
+            var assignmentTopicIds = result.Where(t => t.Type?.ToLower() == "assignment").Select(t => t.Id).ToList();
+
+            if (quizTopicIds.Any())
+            {
+                var quizResponses = await _unitOfWork.QuizResponses.FindByTopicIdsAndStudentIdAsync(quizTopicIds, userId, ct);
+                foreach (var dto in result.Where(t => t.Type?.ToLower() == "quiz"))
+                {
+                    dto.Response = quizResponses
+                        .Where(r => r.TopicId == dto.Id)
+                        .OrderByDescending(r => r.CompletedAt)
+                        .FirstOrDefault();
+                }
+            }
+
+            if (assignmentTopicIds.Any())
+            {
+                var assignmentResponses = await _unitOfWork.AssignmentResponses.FindByTopicIdsAndStudentIdAsync(assignmentTopicIds, userId, ct);
+                foreach (var dto in result.Where(t => t.Type?.ToLower() == "assignment"))
+                {
+                    dto.Response = assignmentResponses
+                        .Where(r => r.TopicId == dto.Id)
+                        .OrderByDescending(r => r.SubmittedAt)
+                        .FirstOrDefault();
+                }
+            }
+
             return result;
         }
 
