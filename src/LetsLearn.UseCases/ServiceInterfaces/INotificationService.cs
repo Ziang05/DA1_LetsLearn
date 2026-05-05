@@ -1,4 +1,4 @@
-﻿using LetsLearn.UseCases.DTOs;
+using LetsLearn.UseCases.DTOs;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,6 +13,7 @@ namespace LetsLearn.UseCases.ServiceInterfaces
         Task<NotificationDto> MarkAsReadAsync(Guid id, bool isRead, CancellationToken ct = default);
         Task DeleteNotificationAsync(Guid id, CancellationToken ct = default);
         Task<NotificationDto> CreateNotificationAsync(Guid userId, string title, string message, CancellationToken ct = default);
+        Task<NotificationDto> CreateNotificationAsync(Guid userId, string title, string message, string type, Guid entityId, CancellationToken ct = default);
         Task NotifyUserAsync(Guid userId, string title, string message, CancellationToken ct = default);
     }
 }

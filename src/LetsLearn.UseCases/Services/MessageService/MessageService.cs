@@ -1,4 +1,4 @@
-﻿using LetsLearn.Core.Interfaces;
+using LetsLearn.Core.Interfaces;
 using LetsLearn.UseCases.DTOs;
 using LetsLearn.Core.Entities;
 using LetsLearn.Infrastructure.Repository;
@@ -31,7 +31,27 @@ namespace LetsLearn.UseCases.Services.MessageService
             var conversation = await _unitOfWork.Conversations.GetByIdAsync(dto.ConversationId);
             if (conversation == null)
             {
-                throw new KeyNotFoundException("Conversation not found");
+                var courseIdStr = dto.ConversationId.ToString();
+                var course = await _unitOfWork.Course.GetByIdAsync(courseIdStr);
+                if (course != null)
+                {
+                    conversation = new Conversation
+                    {
+                        Id = dto.ConversationId,
+                        User1Id = course.CreatorId,
+                        User2Id = dto.ConversationId, // Using Id as sentinel to bypass unique index (User1Id, User2Id)
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    await _unitOfWork.Conversations.AddAsync(conversation);
+                }
+                else
+                {
+                    throw new KeyNotFoundException($"Conversation or Course not found for ID: {dto.ConversationId}");
+                }
+            }
+            else
+            {
+                conversation.UpdatedAt = DateTime.UtcNow;
             }
 
             var userExists = await _unitOfWork.Users.ExistsAsync(u => u.Id == SenderId);
@@ -50,23 +70,15 @@ namespace LetsLearn.UseCases.Services.MessageService
             };
 
             await _unitOfWork.Messages.AddAsync(message);
-            try
-            {
-                await _unitOfWork.CommitAsync();
-            }
-            catch (DbUpdateException ex)
-            {
-                throw new InvalidOperationException("Failed to create message.", ex);
-            }
 
-            conversation.UpdatedAt = DateTime.UtcNow;
             try
             {
                 await _unitOfWork.CommitAsync();
             }
-            catch (DbUpdateException ex)
+            catch (Exception ex)
             {
-                throw new InvalidOperationException("Failed to update conversation timestamp.", ex);
+                // Catching all to provide better context, though DbUpdateException is the usual suspect
+                throw new InvalidOperationException($"Failed to save chat message: {ex.Message}", ex);
             }
         }
 
@@ -100,12 +112,32 @@ namespace LetsLearn.UseCases.Services.MessageService
         public async Task<bool> IsUserInConversationAsync(Guid userId, Guid conversationId)
         {
             var conversation = await _unitOfWork.Conversations.GetByIdAsync(conversationId);
-            if (conversation == null)
+            if (conversation != null)
             {
+                if (conversation.User1Id == userId || conversation.User2Id == userId)
+                {
+                    return true;
+                }
+                
+                // If User2Id is the sentinel (Empty or equal to Id), this is a Course Group Chat!
+                if (conversation.User2Id == Guid.Empty || conversation.User2Id == conversation.Id)
+                {
+                    return await _unitOfWork.Enrollments.ExistsAsync(e => e.CourseId == conversationId.ToString() && e.StudentId == userId);
+                }
+                
                 return false;
             }
 
-            return conversation.User1Id == userId || conversation.User2Id == userId;
+            // Fallback: Check if the conversationId is actually a CourseId (for Course Group Chat that doesn't have a Conversation record yet)
+            var course = await _unitOfWork.Course.GetByIdAsync(conversationId.ToString());
+            if (course != null)
+            {
+                // Check if user is the creator or enrolled in the course
+                if (course.CreatorId == userId) return true;
+                return await _unitOfWork.Enrollments.ExistsAsync(e => e.CourseId == conversationId.ToString() && e.StudentId == userId);
+            }
+
+            return false;
         }
     }
 }

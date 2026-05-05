@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -11,6 +11,8 @@ namespace LetsLearn.UseCases.DTOs
         public Guid Id { get; set; }
         public string? Title { get; set; }     // lấy từ Data
         public string? Message { get; set; }   // lấy từ Data
+        public string? Type { get; set; }
+        public Guid? EntityId { get; set; }
         public DateTime Timestamp { get; set; }
         public bool IsRead { get; set; }
     }

@@ -25,6 +25,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using StackExchange.Redis;
 using System.Text;
+using LetsLearn.API.Hubs;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -33,6 +34,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
+// SignalR — cho phép real-time messaging
+builder.Services.AddSignalR();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -138,11 +141,11 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend",
         builder => builder
-            .WithOrigins("http://localhost:4200", "http://localhost:3000", "http://localhost:3001") // FE port
+            .WithOrigins("http://localhost:4200", "http://localhost:3000", "http://localhost:3001")
             .AllowAnyHeader()
             .AllowAnyMethod()
             .SetIsOriginAllowed(origin => true)
-            .AllowCredentials());
+            .AllowCredentials()); // AllowCredentials bắt buộc cho SignalR WebSocket
 });
 
 var app = builder.Build();
@@ -176,6 +179,46 @@ await using (var scope = app.Services.CreateAsyncScope())
             CONSTRAINT ""PK_Payments"" PRIMARY KEY (""Id"")
         );";
     await dbContext.Database.ExecuteSqlRawAsync(createPaymentsSql);
+
+    try 
+    {
+        Console.WriteLine("---- STARTING TABLE CREATION & ALTERATION ----");
+        var createTopicMeetingsSql = @"
+            CREATE TABLE IF NOT EXISTS ""TopicMeetings"" (
+                ""TopicId"" uuid NOT NULL,
+                ""Description"" text,
+                ""Open"" timestamp with time zone,
+                ""Close"" timestamp with time zone,
+                ""MeetingLink"" text,
+                CONSTRAINT ""PK_TopicMeetings"" PRIMARY KEY (""TopicId""),
+                CONSTRAINT ""FK_TopicMeetings_Topics_TopicId"" FOREIGN KEY (""TopicId"") REFERENCES ""Topics"" (""Id"") ON DELETE CASCADE
+            );";
+        await dbContext.Database.ExecuteSqlRawAsync(createTopicMeetingsSql);
+        
+        // Add MeetingLink column if table already existed but without this column
+        var alterTopicMeetingsSql = @"ALTER TABLE ""TopicMeetings"" ADD COLUMN IF NOT EXISTS ""MeetingLink"" text;";
+        await dbContext.Database.ExecuteSqlRawAsync(alterTopicMeetingsSql);
+
+        Console.WriteLine("---- TOPIC MEETINGS TABLE CHECKED ----");
+
+        var createTopicMeetingHistoriesSql = @"
+            CREATE TABLE IF NOT EXISTS ""TopicMeetingHistories"" (
+                ""Id"" uuid NOT NULL,
+                ""TopicMeetingId"" uuid NOT NULL,
+                ""StartTime"" timestamp with time zone NOT NULL,
+                ""EndTime"" timestamp with time zone,
+                ""AttendeeCount"" integer NOT NULL,
+                ""AttendanceCsvUrl"" text,
+                CONSTRAINT ""PK_TopicMeetingHistories"" PRIMARY KEY (""Id""),
+                CONSTRAINT ""FK_TopicMeetingHistories_TopicMeetings_TopicMeetingId"" FOREIGN KEY (""TopicMeetingId"") REFERENCES ""TopicMeetings"" (""TopicId"") ON DELETE CASCADE
+            );";
+        await dbContext.Database.ExecuteSqlRawAsync(createTopicMeetingHistoriesSql);
+        Console.WriteLine("---- TOPIC MEETING HISTORIES TABLE CHECKED ----");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine("---- ERROR CREATING/ALTERING TABLES: " + ex.ToString());
+    }
 
     // Seed admin user
     var authService = services.GetRequiredService<IAuthService>();
@@ -221,5 +264,8 @@ app.UseJwtAuth();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Map SignalR Hub — FE kết nối tới "/hubs/chat"
+app.MapHub<ChatHub>("/hubs/chat");
 
 app.Run();

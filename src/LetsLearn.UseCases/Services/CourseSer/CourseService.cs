@@ -21,15 +21,17 @@ namespace LetsLearn.UseCases.Services.CourseSer
         private readonly IUnitOfWork _uow;
         private readonly ITopicService _topicService;
         private readonly ILogger<CourseService> _logger;
+        private readonly INotificationService _notificationService;
 
         private static readonly DateTime MIN = DateTime.SpecifyKind(DateTime.MinValue.AddYears(1), DateTimeKind.Utc);
         private static readonly DateTime MAX = DateTime.SpecifyKind(DateTime.MaxValue.AddYears(-1), DateTimeKind.Utc);
 
-        public CourseService(IUnitOfWork uow, ITopicService topicService, ILogger<CourseService> logger)
+        public CourseService(IUnitOfWork uow, ITopicService topicService, ILogger<CourseService> logger, INotificationService notificationService)
         {
             _uow = uow;
             _topicService = topicService;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
         // =============== CREATE / UPDATE ===============
@@ -87,6 +89,26 @@ namespace LetsLearn.UseCases.Services.CourseSer
             try
             {
                 await _uow.CommitAsync();
+
+                // Notify all students about the new course if it's published
+                if (course.IsPublished)
+                {
+                    var students = await _uow.Users.FindAsync(u => u.Role.ToLower() == "student" || u.Role.ToLower() == "learner");
+                    foreach (var student in students)
+                    {
+                        if (student.Id == userId) continue; // Don't notify the creator
+                        
+                        Guid.TryParse(course.Id, out Guid courseGuid);
+                        await _notificationService.CreateNotificationAsync(
+                            student.Id,
+                            $"Khóa học mới: {course.Title}",
+                            $"Một khóa học mới vừa được ra mắt: {course.Description}. Tham gia ngay!",
+                            "NEW_COURSE",
+                            courseGuid,
+                            ct
+                        );
+                    }
+                }
             }
             catch (DbUpdateException ex)
             {
@@ -221,14 +243,57 @@ namespace LetsLearn.UseCases.Services.CourseSer
             var userExists = await _uow.Users.ExistsAsync(u => u.Id == userId, ct);
             if (!userExists) throw new KeyNotFoundException("User not found.");
 
+            // Get both created courses and enrolled courses
+            var createdCourses = await _uow.Course.FindAsync(c => c.CreatorId == userId, ct);
             var enrollments = await _uow.Enrollments.GetByStudentId(userId, ct);
-            var courseIds = enrollments.Select(e => e.CourseId).Distinct();
-            var courses = await _uow.Course.GetByIdsAsync(courseIds);
+            var enrolledCourseIds = enrollments.Select(e => e.CourseId).Distinct().ToList();
+            var enrolledCourses = await _uow.Course.GetByIdsAsync(enrolledCourseIds);
+
+            var allCourses = createdCourses.Concat(enrolledCourses.Where(c => c != null)).DistinctBy(c => c.Id).ToList();
+
+            if (!allCourses.Any()) return new List<GetCourseResponse>();
+
+            var courseIds = allCourses.Select(c => c.Id).ToList();
+            var counts = await _uow.Enrollments.GetStudentCountsByRoleAsync(courseIds, ct);
 
             var results = new List<GetCourseResponse>();
-            foreach (var course in courses.Where(c => c != null))
+            foreach (var course in allCourses)
             {
-                results.Add(await MapToResponseAsync(course!));
+                if (counts.TryGetValue(course.Id, out int count))
+                {
+                    course.TotalJoined = count;
+                }
+
+                var response = await MapToResponseAsync(course);
+
+                var creator = await _uow.Users.GetByIdAsync(course.CreatorId, ct);
+                if (creator != null)
+                {
+                    response.Creator = new UserBasicInfo
+                    {
+                        Id = creator.Id,
+                        Username = creator.Username,
+                        Avatar = creator.Avatar
+                    };
+                }
+
+                var courseEnrollments = await _uow.Enrollments.GetAllByCourseIdAsync(course.Id, ct);
+                response.Students = new List<UserBasicInfo>();
+                foreach (var enr in courseEnrollments)
+                {
+                    var student = await _uow.Users.GetByIdAsync(enr.StudentId, ct);
+                    if (student != null && (student.Role.ToLower() == "student" || student.Role.ToLower() == "learner"))
+                    {
+                        response.Students.Add(new UserBasicInfo
+                        {
+                            Id = student.Id,
+                            Username = student.Username,
+                            Avatar = student.Avatar
+                        });
+                    }
+                }
+
+                results.Add(response);
             }
             return results;
         }

@@ -1,4 +1,4 @@
-﻿using LetsLearn.Core.Entities;
+using LetsLearn.Core.Entities;
 using LetsLearn.Core.Interfaces;
 using LetsLearn.UseCases.DTOs;
 using LetsLearn.UseCases.ServiceInterfaces;
@@ -72,6 +72,11 @@ namespace LetsLearn.UseCases.Services
         // D = 1 => Minimum Test Cases = D + 1 = 2
         public async Task<NotificationDto> CreateNotificationAsync(Guid userId, string title, string message, CancellationToken ct = default)
         {
+            return await CreateNotificationAsync(userId, title, message, "GENERIC", Guid.Empty, ct);
+        }
+
+        public async Task<NotificationDto> CreateNotificationAsync(Guid userId, string title, string message, string type, Guid entityId, CancellationToken ct = default)
+        {
             var user = await _uow.Users.GetByIdAsync(userId)
                        ?? throw new KeyNotFoundException("User not found");
 
@@ -81,9 +86,9 @@ namespace LetsLearn.UseCases.Services
             {
                 Id = Guid.NewGuid(),
                 UserId = userId,
-                Type = "GENERIC",
-                EntityId = Guid.Empty,
-                ActorId = user.Id,
+                Type = type,
+                EntityId = entityId,
+                ActorId = Guid.Empty, // Could be system or current user
                 CreatedAt = DateTime.UtcNow,
                 ReadAt = null,
                 Data = JsonSerializer.Serialize(payload, _jsonOptions)
@@ -156,6 +161,8 @@ namespace LetsLearn.UseCases.Services
                 Id = n.Id,
                 Title = title,
                 Message = message,
+                Type = n.Type,
+                EntityId = n.EntityId,
                 Timestamp = n.CreatedAt,
                 IsRead = n.ReadAt != null
             };

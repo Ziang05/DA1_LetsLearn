@@ -62,6 +62,12 @@ namespace LetsLearn.API.Middleware
                     token = headerValue.Substring("Bearer ".Length).Trim();
                 }
             }
+            // SignalR negotiate gửi token qua query string ?access_token=...
+            else if (context.Request.Query.TryGetValue("access_token", out var queryToken)
+                     && !string.IsNullOrEmpty(queryToken))
+            {
+                token = queryToken.ToString();
+            }
 
             if (!string.IsNullOrEmpty(token))
             {

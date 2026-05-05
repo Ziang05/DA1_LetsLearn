@@ -19,12 +19,14 @@ namespace LetsLearn.UseCases.Services
         private readonly IUnitOfWork _unitOfWork;
         private readonly ILogger<TopicService> _logger;
         private readonly IEmailService _emailService;
+        private readonly INotificationService _notificationService;
 
-        public TopicService(IUnitOfWork unitOfWork, ILogger<TopicService> logger, IEmailService emailService)
+        public TopicService(IUnitOfWork unitOfWork, ILogger<TopicService> logger, IEmailService emailService, INotificationService notificationService)
         {
             _unitOfWork = unitOfWork;
             _logger = logger;
             _emailService = emailService;
+            _notificationService = notificationService;
         }
 
         // Test Case Estimation:
@@ -342,6 +344,7 @@ namespace LetsLearn.UseCases.Services
 
                 try
                 {
+                    // Send Email
                     await _emailService.SendNewTopicNotificationAsync(
                         student.Email,
                         student.Username ?? "Student",
@@ -351,6 +354,17 @@ namespace LetsLearn.UseCases.Services
                         openDate,
                         closeDate
                     );
+
+                    // Create Database Notification
+                    await _notificationService.CreateNotificationAsync(
+                        student.Id,
+                        $"Hoạt động mới: {topic.Title ?? "Nội dung mới"}",
+                        $"Giáo viên vừa tạo một {topic.Type ?? "nội dung"} mới trong khóa học {course.Title ?? "khóa học"}. Click để xem chi tiết.",
+                        "NEW_TOPIC",
+                        topic.Id,
+                        ct
+                    );
+
                     sentCount++;
                 }
                 catch (Exception ex)

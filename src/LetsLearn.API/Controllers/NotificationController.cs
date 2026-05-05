@@ -1,4 +1,4 @@
-﻿using LetsLearn.UseCases.DTOs;
+using LetsLearn.UseCases.DTOs;
 using LetsLearn.UseCases.ServiceInterfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -7,7 +7,7 @@ using System.Security.Claims;
 namespace LetsLearn.API.Controllers
 {
     [ApiController]
-    [Route("notification")]
+    [Route("[controller]")]
     [Authorize]
     public class NotificationController : ControllerBase
     {

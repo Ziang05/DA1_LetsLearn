@@ -174,8 +174,6 @@ namespace LetsLearn.Infrastructure.Data
                 .HasMany(c => c.Messages).WithOne()
                 .HasForeignKey(m => m.ConversationId)
                 .OnDelete(DeleteBehavior.Cascade);
-            modelBuilder.Entity<Conversation>()
-                .HasIndex(c => new { c.User1Id, c.User2Id }).IsUnique();
 
             // ===== Comments (thread) =====
             modelBuilder.Entity<Comment>()
