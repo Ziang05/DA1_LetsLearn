@@ -77,8 +77,8 @@ namespace LetsLearn.API.Controllers
 
                 // Generate LiveKit JWT token
                 var liveKitApiKey = _configuration["LiveKit:ApiKey"] ?? "devkey";
-                var liveKitApiSecret = _configuration["LiveKit:ApiSecret"] ?? "thisisaverylongsecretstring1234567890";
-                var liveKitWsUrl = _configuration["LiveKit:WsUrl"] ?? "ws://45.128.222.24:7880";
+                var liveKitApiSecret = _configuration["LiveKit:ApiSecret"] ?? "this_is_a_very_secret_key_123456789";
+                var liveKitWsUrl = _configuration["LiveKit:WsUrl"] ?? "ws://localhost:7880";
 
                 // 3. Create Metadata
                 var metadata = new Dictionary<string, string>
@@ -105,12 +105,16 @@ namespace LetsLearn.API.Controllers
             }
             catch (KeyNotFoundException ex)
             {
-                return NotFound(new { error = "Meeting not found" });
+                return NotFound(new { error = ex.Message });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error generating meeting token for course {CourseId}, topic {TopicId}", courseId, topicId);
-                return BadRequest(new { error = "Failed to generate meeting token" });
+                return BadRequest(new { 
+                    error = "Failed to generate meeting token",
+                    details = ex.Message,
+                    stack = ex.StackTrace // Tạm thời để debug
+                });
             }
         }
 
