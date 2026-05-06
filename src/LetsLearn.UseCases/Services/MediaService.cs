@@ -36,14 +36,28 @@ namespace LetsLearn.UseCases.Services
                 throw new ArgumentException("File is empty");
 
             using var stream = file.OpenReadStream();
-            var uploadParams = new ImageUploadParams()
-            {
-                File = new FileDescription(file.FileName, stream),
-                Folder = "LetsLearn",
-                UploadPreset = _uploadPreset
-            };
+            var isImage = file.ContentType.StartsWith("image/");
+            UploadResult uploadResult;
 
-            var uploadResult = await _cloudinary.UploadAsync(uploadParams);
+            if (isImage)
+            {
+                var uploadParams = new ImageUploadParams()
+                {
+                    File = new FileDescription(file.FileName, stream),
+                    Folder = "LetsLearn",
+                    UploadPreset = _uploadPreset
+                };
+                uploadResult = await _cloudinary.UploadAsync(uploadParams);
+            }
+            else
+            {
+                var uploadParams = new RawUploadParams()
+                {
+                    File = new FileDescription(file.FileName, stream),
+                    Folder = "LetsLearn"
+                };
+                uploadResult = await _cloudinary.UploadAsync(uploadParams);
+            }
 
             if (uploadResult.Error != null)
             {

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
@@ -12,6 +12,8 @@ namespace LetsLearn.UseCases.DTOs
         public Guid ConversationId { get; set; }
         [Required(ErrorMessage = "Content is required")]
         public string Content { get; set; } = null!;
+        public string? ImageUrl { get; set; }
+        public string? FileUrl { get; set; }
     }
 
     public class GetMessageRequest
@@ -25,6 +27,8 @@ namespace LetsLearn.UseCases.DTOs
         public Guid ConversationId { get; set; }
         public Guid SenderId { get; set; }
         public string Content { get; set; } = null!;
+        public string? ImageUrl { get; set; }
+        public string? FileUrl { get; set; }
         public DateTime Timestamp { get; set; }
     }
 }

@@ -66,6 +66,8 @@ namespace LetsLearn.UseCases.Services.MessageService
                 ConversationId = dto.ConversationId,
                 SenderId = SenderId,
                 Content = dto.Content,
+                ImageUrl = dto.ImageUrl,
+                FileUrl = dto.FileUrl,
                 Timestamp = DateTime.UtcNow
             };
 
@@ -77,8 +79,9 @@ namespace LetsLearn.UseCases.Services.MessageService
             }
             catch (Exception ex)
             {
-                // Catching all to provide better context, though DbUpdateException is the usual suspect
-                throw new InvalidOperationException($"Failed to save chat message: {ex.Message}", ex);
+                // Catching all to provide better context, and include inner exception which has the real DB error
+                var innerMessage = ex.InnerException != null ? $" --> {ex.InnerException.Message}" : "";
+                throw new InvalidOperationException($"Failed to save chat message: {ex.Message}{innerMessage}", ex);
             }
         }
 
@@ -98,6 +101,8 @@ namespace LetsLearn.UseCases.Services.MessageService
                     ConversationId = msg.ConversationId,
                     SenderId = msg.SenderId, 
                     Content = msg.Content,
+                    ImageUrl = msg.ImageUrl,
+                    FileUrl = msg.FileUrl,
                     Timestamp = msg.Timestamp
                 });
             }

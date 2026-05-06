@@ -24,6 +24,8 @@ namespace LetsLearn.API.Hubs
         public string SenderName { get; set; } = string.Empty;
         public string SenderAvatar { get; set; } = string.Empty;
         public string Content { get; set; } = string.Empty;
+        public string? ImageUrl { get; set; }
+        public string? FileUrl { get; set; }
         public DateTime Timestamp { get; set; }
     }
 
@@ -92,7 +94,7 @@ namespace LetsLearn.API.Hubs
         /// Bước 2: FE gọi để gửi tin nhắn.
         /// BE lưu vào DB (tái dùng MessageService) rồi broadcast tới tất cả thành viên trong group.
         /// </summary>
-        public async Task SendMessage(string conversationId, string content)
+        public async Task SendMessage(string conversationId, string content, string? imageUrl = null, string? fileUrl = null)
         {
             try
             {
@@ -101,7 +103,7 @@ namespace LetsLearn.API.Hubs
                 if (!Guid.TryParse(conversationId, out var convGuid))
                     throw new HubException("Invalid conversationId.");
 
-                if (string.IsNullOrWhiteSpace(content))
+                if (string.IsNullOrWhiteSpace(content) && string.IsNullOrEmpty(imageUrl) && string.IsNullOrEmpty(fileUrl))
                     throw new HubException("Message content cannot be empty.");
 
                 // Kiểm tra quyền
@@ -113,7 +115,9 @@ namespace LetsLearn.API.Hubs
                 var request = new CreateMessageRequest
                 {
                     ConversationId = convGuid,
-                    Content = content.Trim()
+                    Content = content?.Trim() ?? string.Empty,
+                    ImageUrl = imageUrl,
+                    FileUrl = fileUrl
                 };
                 await _messageService.CreateMessageAsync(request, userId);
 
@@ -127,7 +131,9 @@ namespace LetsLearn.API.Hubs
                     SenderId = userId,
                     SenderName = sender.Username ?? "Unknown",
                     SenderAvatar = sender.Avatar ?? "",
-                    Content = content.Trim(),
+                    Content = content?.Trim() ?? string.Empty,
+                    ImageUrl = imageUrl,
+                    FileUrl = fileUrl,
                     Timestamp = DateTime.UtcNow
                 };
 

@@ -214,6 +214,14 @@ await using (var scope = app.Services.CreateAsyncScope())
             );";
         await dbContext.Database.ExecuteSqlRawAsync(createTopicMeetingHistoriesSql);
         Console.WriteLine("---- TOPIC MEETING HISTORIES TABLE CHECKED ----");
+
+        // Patch for Messages table: Add ImageUrl and FileUrl if missing
+        var alterMessagesSql = @"
+            ALTER TABLE ""Messages"" ADD COLUMN IF NOT EXISTS ""ImageUrl"" text;
+            ALTER TABLE ""Messages"" ADD COLUMN IF NOT EXISTS ""FileUrl"" text;
+        ";
+        await dbContext.Database.ExecuteSqlRawAsync(alterMessagesSql);
+        Console.WriteLine("---- MESSAGES TABLE COLUMNS CHECKED ----");
     }
     catch (Exception ex)
     {
