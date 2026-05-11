@@ -14,6 +14,7 @@ namespace LetsLearn.UseCases.DTOs
         public string Content { get; set; } = null!;
         public string? ImageUrl { get; set; }
         public string? FileUrl { get; set; }
+        public string? FileName { get; set; }
     }
 
     public class GetMessageRequest
@@ -29,6 +30,7 @@ namespace LetsLearn.UseCases.DTOs
         public string Content { get; set; } = null!;
         public string? ImageUrl { get; set; }
         public string? FileUrl { get; set; }
+        public string? FileName { get; set; }
         public DateTime Timestamp { get; set; }
     }
 }

@@ -26,6 +26,7 @@ namespace LetsLearn.API.Hubs
         public string Content { get; set; } = string.Empty;
         public string? ImageUrl { get; set; }
         public string? FileUrl { get; set; }
+        public string? FileName { get; set; }
         public DateTime Timestamp { get; set; }
     }
 
@@ -94,7 +95,7 @@ namespace LetsLearn.API.Hubs
         /// Bước 2: FE gọi để gửi tin nhắn.
         /// BE lưu vào DB (tái dùng MessageService) rồi broadcast tới tất cả thành viên trong group.
         /// </summary>
-        public async Task SendMessage(string conversationId, string content, string? imageUrl = null, string? fileUrl = null)
+        public async Task SendMessage(string conversationId, string content, string? imageUrl = null, string? fileUrl = null, string? fileName = null)
         {
             try
             {
@@ -117,7 +118,8 @@ namespace LetsLearn.API.Hubs
                     ConversationId = convGuid,
                     Content = content?.Trim() ?? string.Empty,
                     ImageUrl = imageUrl,
-                    FileUrl = fileUrl
+                    FileUrl = fileUrl,
+                    FileName = fileName
                 };
                 await _messageService.CreateMessageAsync(request, userId);
 
@@ -134,6 +136,7 @@ namespace LetsLearn.API.Hubs
                     Content = content?.Trim() ?? string.Empty,
                     ImageUrl = imageUrl,
                     FileUrl = fileUrl,
+                    FileName = fileName,
                     Timestamp = DateTime.UtcNow
                 };
 

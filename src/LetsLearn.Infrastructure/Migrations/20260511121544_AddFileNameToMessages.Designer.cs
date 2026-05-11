@@ -3,6 +3,7 @@ using System;
 using LetsLearn.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LetsLearn.Infrastructure.Migrations
 {
     [DbContext(typeof(LetsLearnContext))]
-    partial class LetsLearnContextModelSnapshot : ModelSnapshot
+    [Migration("20260511121544_AddFileNameToMessages")]
+    partial class AddFileNameToMessages
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

@@ -14,6 +14,7 @@ namespace LetsLearn.Core.Entities
         public string Content { get; set; } = null!;  // VARCHAR(1000) NOT NULL
         public string? ImageUrl { get; set; }
         public string? FileUrl { get; set; }
+        public string? FileName { get; set; }
         public DateTime Timestamp { get; set; }   // NOT NULL
     }
 }

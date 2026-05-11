@@ -1,40 +1,27 @@
-using System;
-using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace LetsLearn.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class AddMediaToMessages : Migration
+    public partial class AddFileNameToMessages : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            /*
             migrationBuilder.AddColumn<string>(
-                name: "ImageUrl",
+                name: "FileName",
                 table: "Messages",
                 type: "text",
                 nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "FileUrl",
-                table: "Messages",
-                type: "text",
-                nullable: true);
-            */
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(
-                name: "ImageUrl",
-                table: "Messages");
-
-            migrationBuilder.DropColumn(
-                name: "FileUrl",
+                name: "FileName",
                 table: "Messages");
         }
     }

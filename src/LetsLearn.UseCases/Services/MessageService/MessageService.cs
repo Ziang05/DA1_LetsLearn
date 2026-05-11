@@ -68,6 +68,7 @@ namespace LetsLearn.UseCases.Services.MessageService
                 Content = dto.Content,
                 ImageUrl = dto.ImageUrl,
                 FileUrl = dto.FileUrl,
+                FileName = dto.FileName,
                 Timestamp = DateTime.UtcNow
             };
 
@@ -103,6 +104,7 @@ namespace LetsLearn.UseCases.Services.MessageService
                     Content = msg.Content,
                     ImageUrl = msg.ImageUrl,
                     FileUrl = msg.FileUrl,
+                    FileName = msg.FileName,
                     Timestamp = msg.Timestamp
                 });
             }
