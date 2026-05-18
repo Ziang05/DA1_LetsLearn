@@ -48,6 +48,19 @@ services:
     networks:
       - productnetwork
 
+  livekit:
+    image: livekit/livekit-server
+    command: --dev
+    environment:
+      - LIVEKIT_KEYS=devkey: this_is_a_very_secret_key_123456789
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+    networks:
+      - productnetwork
+    restart: on-failure
+
 networks:
   productnetwork:
 
