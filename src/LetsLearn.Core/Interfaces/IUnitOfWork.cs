@@ -35,6 +35,11 @@ namespace LetsLearn.Core.Interfaces
         IEnrollmentRepository Enrollments { get; }
         INotificationRepository Notifications { get; }
         IRepository<Payment> Payments { get; }
+        IRepository<LectureDocument> LectureDocuments { get; }
+        IRepository<LectureChunk> LectureChunks { get; }
+        IRepository<AiQuestionGenerationJob> AiQuestionGenerationJobs { get; }
+        IRepository<AiGeneratedQuestion> AiGeneratedQuestions { get; }
+        IRepository<AiEvaluationResult> AiEvaluationResults { get; }
         Task<int> CommitAsync();
     }
 }

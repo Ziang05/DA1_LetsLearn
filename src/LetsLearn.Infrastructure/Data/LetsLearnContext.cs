@@ -42,6 +42,11 @@ namespace LetsLearn.Infrastructure.Data
         public DbSet<User> Users { get; set; }
         public DbSet<RefreshToken> RefreshTokens { get; set; }
         public DbSet<Payment> Payments { get; set; }
+        public DbSet<LectureDocument> LectureDocuments { get; set; }
+        public DbSet<LectureChunk> LectureChunks { get; set; }
+        public DbSet<AiQuestionGenerationJob> AiQuestionGenerationJobs { get; set; }
+        public DbSet<AiGeneratedQuestion> AiGeneratedQuestions { get; set; }
+        public DbSet<AiEvaluationResult> AiEvaluationResults { get; set; }
         #endregion
 
         #region OnModelCreating
@@ -217,6 +222,35 @@ namespace LetsLearn.Infrastructure.Data
                 .HasOne(rt => rt.User)
                 .WithMany()
                 .HasForeignKey(rt => rt.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // ===== AI question generation =====
+            modelBuilder.Entity<LectureDocument>()
+                .HasMany(d => d.Chunks)
+                .WithOne()
+                .HasForeignKey(c => c.DocumentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<LectureChunk>()
+                .HasIndex(c => new { c.DocumentId, c.ChunkOrder });
+
+            modelBuilder.Entity<AiQuestionGenerationJob>()
+                .HasMany(j => j.Questions)
+                .WithOne()
+                .HasForeignKey(q => q.JobId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<AiQuestionGenerationJob>()
+                .Property(j => j.KnowledgePoint)
+                .HasMaxLength(500);
+
+            modelBuilder.Entity<AiGeneratedQuestion>()
+                .HasIndex(q => new { q.JobId, q.Score });
+
+            modelBuilder.Entity<AiEvaluationResult>()
+                .HasOne<AiGeneratedQuestion>()
+                .WithMany()
+                .HasForeignKey(e => e.GeneratedQuestionId)
                 .OnDelete(DeleteBehavior.Cascade);
         }
 

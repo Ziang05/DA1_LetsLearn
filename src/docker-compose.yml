@@ -18,7 +18,7 @@ services:
     restart: on-failure
 
   postgres:
-    image: postgres:15
+    image: pgvector/pgvector:pg15
     restart: always
     environment:
       POSTGRES_USER: postgres
@@ -52,7 +52,7 @@ services:
     image: livekit/livekit-server
     command: --dev
     environment:
-      - LIVEKIT_KEYS=devkey: this_is_a_very_secret_key_123456789
+      - "LIVEKIT_KEYS=devkey: this_is_a_very_secret_key_123456789"
     ports:
       - "7880:7880"
       - "7881:7881"

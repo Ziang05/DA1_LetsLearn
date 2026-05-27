@@ -45,6 +45,11 @@ namespace LetsLearn.Infrastructure.UnitOfWork
         public IEnrollmentRepository Enrollments { get; private set; }
         public INotificationRepository Notifications { get; }
         public IRepository<Payment> Payments { get; private set; }
+        public IRepository<LectureDocument> LectureDocuments { get; private set; }
+        public IRepository<LectureChunk> LectureChunks { get; private set; }
+        public IRepository<AiQuestionGenerationJob> AiQuestionGenerationJobs { get; private set; }
+        public IRepository<AiGeneratedQuestion> AiGeneratedQuestions { get; private set; }
+        public IRepository<AiEvaluationResult> AiEvaluationResults { get; private set; }
         public UnitOfWork(LetsLearnContext context, ILogger<QuestionRepository> questionLogger)
         {
             _context = context;
@@ -75,6 +80,11 @@ namespace LetsLearn.Infrastructure.UnitOfWork
             TopicQuizQuestionChoices = new TopicQuizQuestionChoiceRepository(_context);
             Notifications = new NotificationRepository(_context);
             Payments = new GenericRepository<Payment>(_context);
+            LectureDocuments = new GenericRepository<LectureDocument>(_context);
+            LectureChunks = new GenericRepository<LectureChunk>(_context);
+            AiQuestionGenerationJobs = new GenericRepository<AiQuestionGenerationJob>(_context);
+            AiGeneratedQuestions = new GenericRepository<AiGeneratedQuestion>(_context);
+            AiEvaluationResults = new GenericRepository<AiEvaluationResult>(_context);
         }
 
         public async Task<int> CommitAsync() =>
