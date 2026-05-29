@@ -1,4 +1,5 @@
 using LetsLearn.Core.Interfaces;
+using LetsLearn.UseCases.DTOs;
 using LetsLearn.UseCases.ServiceInterfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -14,16 +15,19 @@ namespace LetsLearn.API.BackgroundServices
     public class DeadlineReminderBackgroundService : BackgroundService
     {
         private readonly IServiceProvider _serviceProvider;
+        private readonly IEmailQueue _emailQueue;
         private readonly ILogger<DeadlineReminderBackgroundService> _logger;
         private readonly TimeSpan _interval;
         private readonly TimeSpan _reminderWindow;
 
         public DeadlineReminderBackgroundService(
             IServiceProvider serviceProvider,
+            IEmailQueue emailQueue,
             ILogger<DeadlineReminderBackgroundService> logger,
             IConfiguration configuration)
         {
             _serviceProvider = serviceProvider;
+            _emailQueue = emailQueue;
             _logger = logger;
 
             var intervalMins = configuration.GetValue<int>("DeadlineReminder:IntervalMinutes", 2);
@@ -56,18 +60,15 @@ namespace LetsLearn.API.BackgroundServices
 
         private async Task ProcessDeadlineRemindersAsync(CancellationToken ct)
         {
-            using var scope = _serviceProvider.CreateScope();
+            await using var scope = _serviceProvider.CreateAsyncScope();
             var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-            var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
 
             var now = DateTime.UtcNow;
             var windowEnd = now.Add(_reminderWindow);
 
             _logger.LogInformation("[DeadlineReminder] Scanning for deadlines between {Now} and {WindowEnd}.", now, windowEnd);
 
-            // Track sent reminders to avoid duplicate emails
-            var sentKey = $"deadline_reminders_sent_{now:yyyyMMddHHmm}";
-            var sentCount = 0;
+            var queuedCount = 0;
 
             // ── 1. Assignment deadlines ────────────────────────────────────
             var assignmentDeadlines = await unitOfWork.TopicAssignments.FindAsync(
@@ -78,8 +79,8 @@ namespace LetsLearn.API.BackgroundServices
 
             foreach (var assignment in assignmentDeadlines)
             {
-                sentCount += await SendReminderForTopicAsync(
-                    unitOfWork, emailService, assignment.TopicId,
+                queuedCount += await QueueReminderForTopicAsync(
+                    unitOfWork, assignment.TopicId,
                     "assignment", assignment.Close!.Value, ct);
             }
 
@@ -92,8 +93,8 @@ namespace LetsLearn.API.BackgroundServices
 
             foreach (var quiz in quizDeadlines)
             {
-                sentCount += await SendReminderForTopicAsync(
-                    unitOfWork, emailService, quiz.TopicId,
+                queuedCount += await QueueReminderForTopicAsync(
+                    unitOfWork, quiz.TopicId,
                     "quiz", quiz.Close!.Value, ct);
             }
 
@@ -106,20 +107,19 @@ namespace LetsLearn.API.BackgroundServices
 
             foreach (var meeting in meetingStarts)
             {
-                sentCount += await SendMeetingReminderAsync(
-                    unitOfWork, emailService, meeting.TopicId,
+                queuedCount += await QueueMeetingReminderAsync(
+                    unitOfWork, meeting.TopicId,
                     meeting.Open!.Value, meeting.MeetingLink, ct);
             }
 
-            if (sentCount > 0)
+            if (queuedCount > 0)
             {
-                _logger.LogInformation("[DeadlineReminder] Sent {Count} reminder email(s).", sentCount);
+                _logger.LogInformation("[DeadlineReminder] Queued {Count} reminder email(s).", queuedCount);
             }
         }
 
-        private async Task<int> SendReminderForTopicAsync(
+        private async Task<int> QueueReminderForTopicAsync(
             IUnitOfWork unitOfWork,
-            IEmailService emailService,
             Guid topicId,
             string topicType,
             DateTime deadline,
@@ -148,36 +148,30 @@ namespace LetsLearn.API.BackgroundServices
                     if (role != "student" && role != "learner") continue;
                     if (string.IsNullOrEmpty(student.Email)) continue;
 
-                    try
+                    await _emailQueue.QueueEmailAsync(new EmailJob
                     {
-                        await emailService.SendDeadlineReminderAsync(
-                            student.Email,
-                            student.Username ?? "Student",
-                            course.Title ?? "Your course",
-                            topic.Title ?? $"New {topicType}",
-                            topicType,
-                            deadline,
-                            meetingLink: null);
-                        count++;
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "[DeadlineReminder] Failed to send email to {Email}.", student.Email);
-                    }
+                        Type = EmailType.DeadlineReminder,
+                        ToEmail = student.Email,
+                        StudentName = student.Username ?? "Student",
+                        CourseTitle = course.Title ?? "Your course",
+                        TopicTitle = topic.Title ?? $"New {topicType}",
+                        TopicType = topicType,
+                        Deadline = deadline
+                    }, ct);
+                    count++;
                 }
 
                 return count;
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "[DeadlineReminder] Error sending reminder for topic {TopicId}.", topicId);
+                _logger.LogWarning(ex, "[DeadlineReminder] Error queueing reminder for topic {TopicId}.", topicId);
                 return 0;
             }
         }
 
-        private async Task<int> SendMeetingReminderAsync(
+        private async Task<int> QueueMeetingReminderAsync(
             IUnitOfWork unitOfWork,
-            IEmailService emailService,
             Guid topicId,
             DateTime startTime,
             string? meetingLink,
@@ -206,29 +200,25 @@ namespace LetsLearn.API.BackgroundServices
                     if (role != "student" && role != "learner") continue;
                     if (string.IsNullOrEmpty(student.Email)) continue;
 
-                    try
+                    await _emailQueue.QueueEmailAsync(new EmailJob
                     {
-                        await emailService.SendDeadlineReminderAsync(
-                            student.Email,
-                            student.Username ?? "Student",
-                            course.Title ?? "Your course",
-                            topic.Title ?? "Meeting",
-                            "meeting",
-                            startTime,
-                            meetingLink);
-                        count++;
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "[DeadlineReminder] Failed to send meeting reminder to {Email}.", student.Email);
-                    }
+                        Type = EmailType.DeadlineReminder,
+                        ToEmail = student.Email,
+                        StudentName = student.Username ?? "Student",
+                        CourseTitle = course.Title ?? "Your course",
+                        TopicTitle = topic.Title ?? "Meeting",
+                        TopicType = "meeting",
+                        Deadline = startTime,
+                        MeetingLink = meetingLink
+                    }, ct);
+                    count++;
                 }
 
                 return count;
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "[DeadlineReminder] Error sending meeting reminder for topic {TopicId}.", topicId);
+                _logger.LogWarning(ex, "[DeadlineReminder] Error queueing meeting reminder for topic {TopicId}.", topicId);
                 return 0;
             }
         }

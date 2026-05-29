@@ -127,10 +127,13 @@ builder.Services.AddScoped<IAiEmbeddingClient, AiEmbeddingClient>();
 builder.Services.AddScoped<IAiVectorStore, PgvectorAiVectorStore>();
 builder.Services.AddSingleton<IAiQuotaService, AiQuotaService>();
 builder.Services.AddSingleton<IAiQuestionGenerationJobQueue, AiQuestionGenerationJobQueue>();
+builder.Services.AddSingleton<IEmailQueue, EmailQueue>();
 builder.Services.AddScoped<IAiQuestionGenerationService, AiQuestionGenerationService>();
+builder.Services.AddScoped<IAiChatService, AiChatService>();
 
 builder.Services.AddHostedService<DeadlineReminderBackgroundService>();
 builder.Services.AddHostedService<AiQuestionGenerationBackgroundService>();
+builder.Services.AddHostedService<EmailSendingBackgroundService>();
 
 builder.Services.AddSingleton<CourseFactory>();
 

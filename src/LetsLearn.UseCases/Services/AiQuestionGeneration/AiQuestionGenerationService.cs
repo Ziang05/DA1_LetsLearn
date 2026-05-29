@@ -49,7 +49,7 @@ namespace LetsLearn.UseCases.Services.AiQuestionGeneration
             _logger = logger;
         }
 
-        public async Task<UploadLectureDocumentResponse> UploadDocumentAsync(IFormFile file, string courseId, Guid userId, CancellationToken ct = default)
+        public async Task<UploadLectureDocumentResponse> UploadDocumentAsync(IFormFile file, string courseId, Guid userId, bool bypassTeacherCheck = false, CancellationToken ct = default)
         {
             if (file == null || file.Length == 0)
             {
@@ -64,7 +64,7 @@ namespace LetsLearn.UseCases.Services.AiQuestionGeneration
                 file.Length,
                 file.ContentType);
 
-            await EnsureTeacherCanAccessCourse(courseId, userId, ct);
+            await EnsureUserCanAccessCourse(courseId, userId, bypassTeacherCheck, ct);
             await EnforceQuotaAsync(userId, "uploads-per-day", 1, GetQuota("UploadsPerUserPerDay", 20), TimeSpan.FromDays(1), ct);
 
             var maxFileSizeMb = GetQuota("MaxUploadFileSizeMb", 25);
@@ -181,14 +181,14 @@ namespace LetsLearn.UseCases.Services.AiQuestionGeneration
             };
         }
 
-        public async Task<GenerateAiQuestionsResponse> GenerateQuestionsAsync(GenerateAiQuestionsRequest request, Guid userId, CancellationToken ct = default)
+        public async Task<GenerateAiQuestionsResponse> GenerateQuestionsAsync(GenerateAiQuestionsRequest request, Guid userId, bool bypassTeacherCheck = false, CancellationToken ct = default)
         {
             if (request.QuestionCount is < 1 or > 50)
             {
                 throw new ArgumentOutOfRangeException(nameof(request.QuestionCount), "QuestionCount must be between 1 and 50.");
             }
 
-            await EnsureTeacherCanAccessCourse(request.CourseId, userId, ct);
+            await EnsureUserCanAccessCourse(request.CourseId, userId, bypassTeacherCheck, ct);
             await EnforceQuotaAsync(userId, "generate-requests-per-minute", 1, GetQuota("GenerateRequestsPerUserPerMinute", 5), TimeSpan.FromMinutes(1), ct);
             await EnforceQuotaAsync(userId, "generations-per-day", 1, GetQuota("GenerationsPerUserPerDay", 50), TimeSpan.FromDays(1), ct);
             await EnforceQuotaAsync(userId, "generated-questions-per-day", request.QuestionCount, GetQuota("GeneratedQuestionsPerUserPerDay", 200), TimeSpan.FromDays(1), ct);
@@ -1161,6 +1161,11 @@ namespace LetsLearn.UseCases.Services.AiQuestionGeneration
 
         private async Task EnsureTeacherCanAccessCourse(string courseId, Guid userId, CancellationToken ct)
         {
+            await EnsureUserCanAccessCourse(courseId, userId, false, ct);
+        }
+
+        private async Task EnsureUserCanAccessCourse(string courseId, Guid userId, bool bypassTeacherCheck, CancellationToken ct)
+        {
             if (string.IsNullOrWhiteSpace(courseId))
             {
                 throw new ArgumentException("CourseId is required.");
@@ -1168,10 +1173,22 @@ namespace LetsLearn.UseCases.Services.AiQuestionGeneration
 
             var course = await _uow.Course.GetByIdAsync(courseId, ct)
                 ?? throw new KeyNotFoundException("Course not found.");
-            if (course.CreatorId != userId)
+
+            if (course.CreatorId == userId)
             {
-                throw new UnauthorizedAccessException("Only the course creator can use AI question generation for this course.");
+                return;
             }
+
+            if (bypassTeacherCheck)
+            {
+                var enrollment = await _uow.Enrollments.GetByIdsAsync(userId, courseId, ct);
+                if (enrollment != null)
+                {
+                    return;
+                }
+            }
+
+            throw new UnauthorizedAccessException("Only the course creator or enrolled students can use AI question generation for this course.");
         }
 
         private async Task EnforceQuotaAsync(Guid userId, string metric, int amount, int limit, TimeSpan window, CancellationToken ct)

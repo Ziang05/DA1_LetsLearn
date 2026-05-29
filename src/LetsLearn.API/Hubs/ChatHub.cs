@@ -121,14 +121,14 @@ namespace LetsLearn.API.Hubs
                     FileUrl = fileUrl,
                     FileName = fileName
                 };
-                await _messageService.CreateMessageAsync(request, userId);
+                var savedMessageId = await _messageService.CreateMessageAsync(request, userId);
 
                 // Lấy thông tin sender để gửi kèm cho FE
                 var sender = await _userService.GetByIdAsync(userId);
 
                 var payload = new ChatMessageDto
                 {
-                    Id = Guid.NewGuid(),
+                    Id = savedMessageId, // ✅ Dùng ID thật từ DB, không tạo Guid giả
                     ConversationId = convGuid,
                     SenderId = userId,
                     SenderName = sender.Username ?? "Unknown",

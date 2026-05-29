@@ -23,14 +23,14 @@ namespace LetsLearn.API.Controllers
         [HttpPost("documents")]
         [Consumes("multipart/form-data")]
         public async Task<ActionResult<UploadLectureDocumentResponse>> UploadDocument(
-            [FromForm] IFormFile file,
+            [FromForm] UploadLectureDocumentRequest request,
             [FromQuery] string? courseId,
             CancellationToken ct)
         {
             try
             {
                 var resolvedCourseId = await ResolveCourseIdAsync(courseId, ct);
-                var result = await _service.UploadDocumentAsync(file, resolvedCourseId, GetUserId(), ct);
+                var result = await _service.UploadDocumentAsync(request.File, resolvedCourseId, GetUserId(), ct: ct);
                 return Ok(result);
             }
             catch (UnauthorizedAccessException ex)
@@ -55,7 +55,7 @@ namespace LetsLearn.API.Controllers
         {
             try
             {
-                var result = await _service.GenerateQuestionsAsync(request, GetUserId(), ct);
+                var result = await _service.GenerateQuestionsAsync(request, GetUserId(), ct: ct);
                 return Ok(result);
             }
             catch (UnauthorizedAccessException ex)

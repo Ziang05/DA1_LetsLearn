@@ -67,25 +67,68 @@ namespace LetsLearn.UseCases.Services.AiQuestionGeneration
 
             var json = JsonSerializer.Serialize(payload);
             using var content = new StringContent(json, Encoding.UTF8, "application/json");
-            using var response = await httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/models/{model}:generateContent?key={Uri.EscapeDataString(apiKey)}", content, ct);
-
-            if (!response.IsSuccessStatusCode)
+            const int maxRetries = 2;
+            for (int attempt = 0; attempt <= maxRetries; attempt++)
             {
+                // Cần tạo mới content mỗi lần vì HttpContent chỉ dùng được 1 lần
+                using var requestContent = new StringContent(json, Encoding.UTF8, "application/json");
+                using var response = await httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/models/{model}:generateContent?key={Uri.EscapeDataString(apiKey)}", requestContent, ct);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseJson = await response.Content.ReadAsStringAsync(ct);
+                    using var doc = JsonDocument.Parse(responseJson);
+                    var text = doc.RootElement
+                        .GetProperty("candidates")[0]
+                        .GetProperty("content")
+                        .GetProperty("parts")[0]
+                        .GetProperty("text")
+                        .GetString();
+                    _logger.LogInformation("[AI Questions] Gemini generateContent succeeded. Model={Model}, ResponseChars={ResponseChars}", model, text?.Length ?? 0);
+                    return text;
+                }
+
                 var error = await response.Content.ReadAsStringAsync(ct);
+
+                // 429 Rate limit → thử retry sau khoảng thời gian Gemini yêu cầu
+                if ((int)response.StatusCode == 429 && attempt < maxRetries)
+                {
+                    var retrySeconds = ParseRetryDelay(error);
+                    var waitSeconds = retrySeconds > 0 ? retrySeconds + 2 : 15; // +2s buffer
+                    _logger.LogWarning("[AI Questions] Gemini 429 rate limit. Attempt={Attempt}/{Max}, WaitSeconds={WaitSeconds}, Model={Model}", attempt + 1, maxRetries, waitSeconds, model);
+                    await Task.Delay(TimeSpan.FromSeconds(waitSeconds), ct);
+                    continue;
+                }
+
                 _logger.LogError("[AI Questions] Gemini generateContent failed. StatusCode={StatusCode}, Model={Model}, Error={Error}", (int)response.StatusCode, model, error);
                 throw new InvalidOperationException($"Gemini returned {(int)response.StatusCode}: {error}");
             }
 
-            var responseJson = await response.Content.ReadAsStringAsync(ct);
-            using var doc = JsonDocument.Parse(responseJson);
-            var text = doc.RootElement
-                .GetProperty("candidates")[0]
-                .GetProperty("content")
-                .GetProperty("parts")[0]
-                .GetProperty("text")
-                .GetString();
-            _logger.LogInformation("[AI Questions] Gemini generateContent succeeded. Model={Model}, ResponseChars={ResponseChars}", model, text?.Length ?? 0);
-            return text;
+            throw new InvalidOperationException("Gemini request failed after retries.");
+        }
+
+        /// <summary>Đọc retryDelay (giây) từ JSON error response của Gemini 429.</summary>
+        private static int ParseRetryDelay(string errorJson)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(errorJson);
+                if (!doc.RootElement.TryGetProperty("error", out var errorEl)) return 0;
+                if (!errorEl.TryGetProperty("details", out var details)) return 0;
+                foreach (var detail in details.EnumerateArray())
+                {
+                    if (detail.TryGetProperty("@type", out var type) &&
+                        type.GetString() == "type.googleapis.com/google.rpc.RetryInfo" &&
+                        detail.TryGetProperty("retryDelay", out var delay))
+                    {
+                        var delayStr = delay.GetString() ?? ""; // e.g. "11s"
+                        if (delayStr.EndsWith("s") && int.TryParse(delayStr.TrimEnd('s'), out var seconds))
+                            return seconds;
+                    }
+                }
+            }
+            catch { /* ignore parse errors */ }
+            return 0;
         }
 
         private async Task<string?> GenerateOpenAiCompatibleJsonAsync(string systemPrompt, string userPrompt, decimal temperature, string modelConfigKey, CancellationToken ct)

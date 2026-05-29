@@ -1,4 +1,4 @@
-﻿using LetsLearn.UseCases.DTOs;
+using LetsLearn.UseCases.DTOs;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,7 +9,7 @@ namespace LetsLearn.UseCases.ServiceInterfaces
 {
     public interface IMessageService
     {
-        Task CreateMessageAsync(CreateMessageRequest dto, Guid SenderId);
+        Task<Guid> CreateMessageAsync(CreateMessageRequest dto, Guid SenderId);
         Task<IEnumerable<GetMessageResponse>> GetMessagesByConversationIdAsync(Guid conversationId);
         Task<bool> IsUserInConversationAsync(Guid userId, Guid conversationId);
     }

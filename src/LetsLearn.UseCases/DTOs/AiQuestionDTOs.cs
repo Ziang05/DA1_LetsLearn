@@ -2,6 +2,11 @@ using Microsoft.AspNetCore.Http;
 
 namespace LetsLearn.UseCases.DTOs
 {
+    public class UploadLectureDocumentRequest
+    {
+        public IFormFile File { get; set; } = null!;
+    }
+
     public class UploadLectureDocumentResponse
     {
         public Guid DocumentId { get; set; }

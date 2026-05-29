@@ -5,8 +5,8 @@ namespace LetsLearn.UseCases.ServiceInterfaces
 {
     public interface IAiQuestionGenerationService
     {
-        Task<UploadLectureDocumentResponse> UploadDocumentAsync(IFormFile file, string courseId, Guid userId, CancellationToken ct = default);
-        Task<GenerateAiQuestionsResponse> GenerateQuestionsAsync(GenerateAiQuestionsRequest request, Guid userId, CancellationToken ct = default);
+        Task<UploadLectureDocumentResponse> UploadDocumentAsync(IFormFile file, string courseId, Guid userId, bool bypassTeacherCheck = false, CancellationToken ct = default);
+        Task<GenerateAiQuestionsResponse> GenerateQuestionsAsync(GenerateAiQuestionsRequest request, Guid userId, bool bypassTeacherCheck = false, CancellationToken ct = default);
         Task ProcessGenerationJobAsync(Guid jobId, CancellationToken ct = default);
         Task<GenerateAiQuestionsResponse> GetJobAsync(Guid jobId, Guid userId, CancellationToken ct = default);
         Task<List<AiGeneratedQuestionResponse>> GetGeneratedQuestionsAsync(Guid jobId, Guid userId, CancellationToken ct = default);

@@ -49,7 +49,7 @@ namespace LetsLearn.API.BackgroundServices
         {
             try
             {
-                using var scope = _serviceProvider.CreateScope();
+                await using var scope = _serviceProvider.CreateAsyncScope();
                 var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
                 var pendingJobs = (await uow.AiQuestionGenerationJobs.FindAsync(j => j.Status == "queued", ct))
                     .Where(j => j != null)
@@ -74,7 +74,7 @@ namespace LetsLearn.API.BackgroundServices
 
         private async Task ProcessJobAsync(Guid jobId, CancellationToken ct)
         {
-            using var scope = _serviceProvider.CreateScope();
+            await using var scope = _serviceProvider.CreateAsyncScope();
             var service = scope.ServiceProvider.GetRequiredService<IAiQuestionGenerationService>();
 
             try

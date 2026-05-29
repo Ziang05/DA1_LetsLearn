@@ -26,7 +26,7 @@ namespace LetsLearn.UseCases.Services.MessageService
         // - if conversation == null: +1
         // - if !userExists: +1
         // D = 2 => Minimum Test Cases = D + 1 = 3
-        public async Task CreateMessageAsync(CreateMessageRequest dto, Guid SenderId)
+        public async Task<Guid> CreateMessageAsync(CreateMessageRequest dto, Guid SenderId)
         {
             var conversation = await _unitOfWork.Conversations.GetByIdAsync(dto.ConversationId);
             if (conversation == null)
@@ -84,6 +84,8 @@ namespace LetsLearn.UseCases.Services.MessageService
                 var innerMessage = ex.InnerException != null ? $" --> {ex.InnerException.Message}" : "";
                 throw new InvalidOperationException($"Failed to save chat message: {ex.Message}{innerMessage}", ex);
             }
+
+            return message.Id;
         }
 
         // Test Case Estimation:
