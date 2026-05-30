@@ -103,16 +103,9 @@ namespace LetsLearn.API.Middleware
                 catch (Exception ex)
                 {
                     _logger.LogWarning($"Invalid token: {ex.Message}");
-                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    await context.Response.WriteAsync("Invalid Token");
-                    return;
+                    // Do not short-circuit here. Unauthenticated requests will proceed and standard
+                    // Authorization middleware ([Authorize] / [AllowAnonymous]) will enforce security.
                 }
-            }
-            else
-            {
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                await context.Response.WriteAsync("Missing Token");
-                return;
             }
 
             await _next(context);
