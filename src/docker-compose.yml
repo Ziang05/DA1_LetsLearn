@@ -50,7 +50,7 @@ services:
 
   livekit:
     image: livekit/livekit-server
-    command: --dev
+    command: --dev --node-ip 127.0.0.1
     environment:
       - "LIVEKIT_KEYS=devkey: this_is_a_very_secret_key_123456789"
     ports:

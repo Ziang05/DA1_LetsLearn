@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using LetsLearn.UseCases.ServiceInterfaces;
 using LetsLearn.UseCases.DTOs;
 using Microsoft.AspNetCore.Authorization;
@@ -112,6 +112,46 @@ namespace LetsLearn.API.Controllers
                 return BadRequest(new { message = ex.Message });
             }
             catch
+            {
+                return StatusCode(500, new { message = "Something went wrong. Please try again later." });
+            }
+        }
+
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
+        {
+            try
+            {
+                await _authService.SendForgotPasswordOtpAsync(request);
+                return Ok(new { message = "Verification code has been sent to your email." });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { message = "Email not found" });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { message = "Something went wrong. Please try again later." });
+            }
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+        {
+            try
+            {
+                await _authService.ResetPasswordWithOtpAsync(request);
+                return Ok(new { message = "Password has been reset successfully." });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { message = "Email not found" });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception)
             {
                 return StatusCode(500, new { message = "Something went wrong. Please try again later." });
             }

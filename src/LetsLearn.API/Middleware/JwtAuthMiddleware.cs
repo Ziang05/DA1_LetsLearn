@@ -22,6 +22,8 @@ namespace LetsLearn.API.Middleware
             "/auth/login",
             "/auth/signup",
             "/auth/refresh",
+            "/auth/forgot-password",
+            "/auth/reset-password",
             "/swagger",
             "/swagger-ui",
             "/v3/api-docs",

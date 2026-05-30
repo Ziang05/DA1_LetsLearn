@@ -1,4 +1,4 @@
-﻿using LetsLearn.UseCases.DTOs;
+using LetsLearn.UseCases.DTOs;
 using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
@@ -15,5 +15,7 @@ namespace LetsLearn.UseCases.ServiceInterfaces
         Task RefreshAsync(HttpContext httpContext);
         Task UpdatePasswordAsync(UpdatePassword request, Guid userId);
         void Logout(HttpContext context);
+        Task SendForgotPasswordOtpAsync(ForgotPasswordRequest request);
+        Task ResetPasswordWithOtpAsync(ResetPasswordRequest request);
     }
 }
