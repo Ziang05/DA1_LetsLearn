@@ -496,11 +496,11 @@ namespace LetsLearn.UseCases.Services
                                          ?? throw new KeyNotFoundException("TopicAssignment not found.");
 
                         assignment.Description = assignmentReq.Description ?? assignment.Description;
-                        assignment.Open = assignmentReq.Open ?? assignment.Open;
-                        assignment.Close = assignmentReq.Close ?? assignment.Close;
+                        assignment.Open = assignmentReq.Open;
+                        assignment.Close = assignmentReq.Close;
                         assignment.MaximumFile = assignmentReq.MaximumFile ?? assignment.MaximumFile;
-                        assignment.MaximumFileSize = assignmentReq.MaximumFileSize ?? assignment.MaximumFileSize;
-                        assignment.RemindToGrade = assignmentReq.RemindToGrade ?? assignment.RemindToGrade;
+                        assignment.MaximumFileSize = assignmentReq.MaximumFileSize;
+                        assignment.RemindToGrade = assignmentReq.RemindToGrade;
 
                         // Update files
                         if (assignmentReq.CloudinaryFiles != null)
@@ -550,13 +550,13 @@ namespace LetsLearn.UseCases.Services
                                    ?? throw new KeyNotFoundException("TopicQuiz not found.");
 
                         quiz.Description = quizReq.Description ?? quiz.Description;
-                        quiz.Open = quizReq.Open ?? quiz.Open;
-                        quiz.Close = quizReq.Close ?? quiz.Close;
-                        quiz.TimeLimit = quizReq.TimeLimit ?? quiz.TimeLimit;
-                        quiz.TimeLimitUnit = quizReq.TimeLimitUnit ?? quiz.TimeLimitUnit;
-                        quiz.GradeToPass = quizReq.GradeToPass ?? quiz.GradeToPass;
+                        quiz.Open = quizReq.Open;
+                        quiz.Close = quizReq.Close;
+                        quiz.TimeLimit = quizReq.TimeLimit;
+                        quiz.TimeLimitUnit = quizReq.TimeLimitUnit;
+                        quiz.GradeToPass = quizReq.GradeToPass;
                         quiz.GradingMethod = quizReq.GradingMethod ?? quiz.GradingMethod;
-                        quiz.AttemptAllowed = quizReq.AttemptAllowed ?? quiz.AttemptAllowed;
+                        quiz.AttemptAllowed = quizReq.AttemptAllowed;
 
                         // 1. Build dictionary cho update nhanh
                         var existingQuestions = quiz.Questions.ToDictionary(q => q.Id);
@@ -703,8 +703,8 @@ namespace LetsLearn.UseCases.Services
                             ?? throw new KeyNotFoundException("TopicMeeting not found.");
 
                         meeting.Description = meetingReq.Description ?? meeting.Description;
-                        meeting.Open = meetingReq.Open ?? meeting.Open;
-                        meeting.Close = meetingReq.Close ?? meeting.Close;
+                        meeting.Open = meetingReq.Open;
+                        meeting.Close = meetingReq.Close;
                         meeting.MeetingLink = meetingReq.MeetingLink ?? meeting.MeetingLink;
 
                         await _unitOfWork.TopicMeetings.UpdateAsync(meeting);

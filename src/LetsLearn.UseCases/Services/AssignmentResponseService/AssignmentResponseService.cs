@@ -1,4 +1,4 @@
-﻿using LetsLearn.Core.Entities;
+using LetsLearn.Core.Entities;
 using LetsLearn.Core.Interfaces;
 using LetsLearn.UseCases.DTOs;
 using LetsLearn.UseCases.ServiceInterfaces;
@@ -98,6 +98,16 @@ namespace LetsLearn.UseCases.Services.AssignmentResponseService
         {
             var entities = await _unitOfWork.AssignmentResponses.GetAllByTopicIdWithFilesAsync(topicId);
             return entities.Select(e => ToDto(e));
+        }
+
+        public async Task<IEnumerable<AssignmentResponseDTO>> GetAssigmentResponsesByTopicIdAndStudentIdAsync(Guid topicId, Guid studentId)
+        {
+            var entity = await _unitOfWork.AssignmentResponses.GetByTopicIdAndStudentIdWithFilesAsync(topicId, studentId);
+            if (entity == null)
+            {
+                return Enumerable.Empty<AssignmentResponseDTO>();
+            }
+            return new List<AssignmentResponseDTO> { ToDto(entity) };
         }
 
         // Test Case Estimation:

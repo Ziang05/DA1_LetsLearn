@@ -1,4 +1,4 @@
-﻿using LetsLearn.UseCases.DTOs;
+using LetsLearn.UseCases.DTOs;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,6 +12,7 @@ namespace LetsLearn.UseCases.ServiceInterfaces
         Task<AssignmentResponseDTO> GetAssigmentResponseByIdAsync(Guid id);
         Task<AssignmentResponseDTO> CreateAssigmentResponseAsync(CreateAssignmentResponseRequest dto, Guid studentId);
         Task<IEnumerable<AssignmentResponseDTO>> GetAllAssigmentResponseByTopicIdAsync(Guid topicId);
+        Task<IEnumerable<AssignmentResponseDTO>> GetAssigmentResponsesByTopicIdAndStudentIdAsync(Guid topicId, Guid studentId);
         Task<AssignmentResponseDTO> UpdateAssigmentResponseByIdAsync(Guid id, UpdateAssignmentResponseRequest dto);
         Task DeleteAssigmentResponseAsync(Guid id);
     }

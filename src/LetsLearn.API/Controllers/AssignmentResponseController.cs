@@ -1,4 +1,4 @@
-﻿using LetsLearn.UseCases.DTOs;
+using LetsLearn.UseCases.DTOs;
 using LetsLearn.UseCases.ServiceInterfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -29,6 +29,19 @@ namespace LetsLearn.API.Controllers
         [HttpGet("getAll")]
         public async Task<ActionResult<IEnumerable<AssignmentResponseDTO>>> GetAllAssignmentResponsesByTopicId([FromRoute] Guid topicId, [FromQuery] Guid? studentId, CancellationToken ct = default)
         {
+            var userId = Guid.Parse(User.Claims.First(c => c.Type == "userID").Value);
+            var role = User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Role)?.Value;
+            if (role != "Admin" && role != "Teacher")
+            {
+                studentId = userId;
+            }
+
+            if (studentId.HasValue)
+            {
+                var response = await _assignmentResponseService.GetAssigmentResponsesByTopicIdAndStudentIdAsync(topicId, studentId.Value);
+                return Ok(response);
+            }
+
             var res = await _assignmentResponseService.GetAllAssigmentResponseByTopicIdAsync(topicId);
             return Ok(res);
         }
@@ -60,6 +73,19 @@ namespace LetsLearn.API.Controllers
             [FromQuery] Guid? studentId = null,
             CancellationToken ct = default)
         {
+            var userId = Guid.Parse(User.Claims.First(c => c.Type == "userID").Value);
+            var role = User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Role)?.Value;
+            if (role != "Admin" && role != "Teacher")
+            {
+                studentId = userId;
+            }
+
+            if (studentId.HasValue)
+            {
+                var response = await _assignmentResponseService.GetAssigmentResponsesByTopicIdAndStudentIdAsync(topicId, studentId.Value);
+                return Ok(response);
+            }
+
             var res = await _assignmentResponseService.GetAllAssigmentResponseByTopicIdAsync(topicId);
             return Ok(res);
         }

@@ -1,4 +1,4 @@
-﻿using LetsLearn.UseCases.DTOs;
+using LetsLearn.UseCases.DTOs;
 using LetsLearn.UseCases.ServiceInterfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -29,11 +29,20 @@ namespace LetsLearn.API.Controllers
         [HttpGet("getAll")]
         public async Task<ActionResult<List<QuizResponseDTO>>> GetAllQuizResponsesByTopicId([FromRoute] Guid topicId, [FromQuery] Guid? studentId, CancellationToken ct = default)
         {
+            var userId = Guid.Parse(User.Claims.First(c => c.Type == "userID").Value);
+            var role = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role)?.Value;
+            if (role != "Admin" && role != "Teacher")
+            {
+                studentId = userId;
+            }
+
             if (studentId.HasValue)
             {
-                return Ok(await _quizResponseService.GetAllQuizResponsesByTopicIdOfStudentAsync(topicId, studentId.Value, ct));
+                var res = await _quizResponseService.GetAllQuizResponsesByTopicIdOfStudentAsync(topicId, studentId.Value, ct);
+                return Ok(res.ToList());
             }
-            return Ok(await _quizResponseService.GetAllQuizResponsesByTopicIdAsync(topicId, ct));
+            var all = await _quizResponseService.GetAllQuizResponsesByTopicIdAsync(topicId, ct);
+            return Ok(all.ToList());
         }
 
         [HttpGet("{id}")]
@@ -53,11 +62,20 @@ namespace LetsLearn.API.Controllers
             [FromQuery] Guid? studentId = null,
             CancellationToken ct = default)
         {
+            var userId = Guid.Parse(User.Claims.First(c => c.Type == "userID").Value);
+            var role = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role)?.Value;
+            if (role != "Admin" && role != "Teacher")
+            {
+                studentId = userId;
+            }
+
             if (studentId.HasValue)
             {
-                return Ok(await _quizResponseService.GetAllQuizResponsesByTopicIdOfStudentAsync(topicId, studentId.Value, ct));
+                var res = await _quizResponseService.GetAllQuizResponsesByTopicIdOfStudentAsync(topicId, studentId.Value, ct);
+                return Ok(res.ToList());
             }
-            return Ok(await _quizResponseService.GetAllQuizResponsesByTopicIdAsync(topicId, ct));
+            var all = await _quizResponseService.GetAllQuizResponsesByTopicIdAsync(topicId, ct);
+            return Ok(all.ToList());
         }
     }
 }
