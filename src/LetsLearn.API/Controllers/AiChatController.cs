@@ -3,6 +3,7 @@ using System.Linq;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
+using System.ComponentModel.DataAnnotations;
 using LetsLearn.UseCases.ServiceInterfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -18,11 +19,13 @@ namespace LetsLearn.API.Controllers
     {
         private readonly IAiChatService _aiChatService;
         private readonly ILogger<AiChatController> _logger;
+        private readonly IMessageService _messageService;
 
-        public AiChatController(IAiChatService aiChatService, ILogger<AiChatController> logger)
+        public AiChatController(IAiChatService aiChatService, ILogger<AiChatController> logger, IMessageService messageService)
         {
             _aiChatService = aiChatService;
             _logger = logger;
+            _messageService = messageService;
         }
 
         [HttpPost("summarize")]
@@ -30,6 +33,9 @@ namespace LetsLearn.API.Controllers
         {
             try
             {
+                if (!await _messageService.IsUserInConversationAsync(GetUserId(), request.ConversationId))
+                    return StatusCode(StatusCodes.Status403Forbidden, new { message = "Bạn không có quyền xem hội thoại này." });
+
                 var summary = await _aiChatService.SummarizeChatAsync(request.ConversationId, request.Limit, ct);
                 return Ok(new { summary });
             }
@@ -86,6 +92,7 @@ namespace LetsLearn.API.Controllers
     public class SummarizeChatRequest
     {
         public Guid ConversationId { get; set; }
+        [Range(2, 100)]
         public int Limit { get; set; } = 50;
     }
 

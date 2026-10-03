@@ -23,5 +23,15 @@ namespace LetsLearn.Infrastructure.Repository
                 .OrderBy(m => m.Timestamp)
                 .ToListAsync();
         }
+
+        public async Task<IReadOnlyList<Message>> GetRecentMessagesAsync(Guid conversationId, int limit, CancellationToken ct = default)
+        {
+            return await _dbSet.AsNoTracking()
+                .Where(m => m.ConversationId == conversationId)
+                .OrderByDescending(m => m.Timestamp)
+                .ThenByDescending(m => m.Id)
+                .Take(limit)
+                .ToListAsync(ct);
+        }
     }
 }

@@ -18,9 +18,13 @@ namespace LetsLearn.API.Controllers
         }
 
         [HttpPost]
-        public async Task<ActionResult<AssignmentResponseDTO>> CreateAssignmentResponse([FromBody] CreateAssignmentResponseRequest dto, CancellationToken ct = default)
+        public async Task<ActionResult<AssignmentResponseDTO>> CreateAssignmentResponse([FromRoute] Guid topicId, [FromBody] CreateAssignmentResponseRequest dto, CancellationToken ct = default)
         {
             var userId = Guid.Parse(User.Claims.First(c => c.Type == "userID").Value);
+
+            dto.TopicId = topicId;
+            dto.SubmittedAt = DateTime.UtcNow;
+            dto.Mark = null;
 
             var result = await _assignmentResponseService.CreateAssigmentResponseAsync(dto, userId);
             return Ok(result);
@@ -54,8 +58,23 @@ namespace LetsLearn.API.Controllers
         }
 
         [HttpPut("{id}")]
-        public async Task<ActionResult<AssignmentResponseDTO>> UpdateAssignmentResponseById([FromRoute] Guid id, [FromBody] UpdateAssignmentResponseRequest dto, CancellationToken ct = default)
+        public async Task<ActionResult<AssignmentResponseDTO>> UpdateAssignmentResponseById([FromRoute] Guid topicId, [FromRoute] Guid id, [FromBody] UpdateAssignmentResponseRequest dto, CancellationToken ct = default)
         {
+            var existing = await _assignmentResponseService.GetAssigmentResponseByIdAsync(id);
+            if (existing.TopicId != topicId) return NotFound();
+
+            var userId = Guid.Parse(User.Claims.First(c => c.Type == "userID").Value);
+            var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+            if (role != "Admin" && role != "Teacher")
+            {
+                if (existing.StudentId != userId) return Forbid();
+                if (existing.Data.Mark.HasValue)
+                    return BadRequest(new { message = "Bài đã chấm điểm không thể chỉnh sửa." });
+                dto.Data.Mark = existing.Data.Mark;
+                dto.Data.SubmittedAt = DateTime.UtcNow;
+            }
+            dto.TopicId = existing.TopicId;
+            dto.StudentId = existing.StudentId;
             var result = await _assignmentResponseService.UpdateAssigmentResponseByIdAsync(id, dto);
             return Ok(result);
         }

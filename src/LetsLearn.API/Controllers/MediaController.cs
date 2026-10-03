@@ -1,4 +1,6 @@
 using LetsLearn.UseCases.ServiceInterfaces;
+using LetsLearn.UseCases.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
@@ -7,6 +9,7 @@ namespace LetsLearn.API.Controllers
 {
     [ApiController]
     [Route("[controller]")]
+    [Authorize]
     public class MediaController : ControllerBase
     {
         private readonly IMediaService _mediaService;
@@ -17,6 +20,8 @@ namespace LetsLearn.API.Controllers
         }
 
         [HttpPost("upload")]
+        [RequestSizeLimit(MediaFilePolicy.MaxRequestSize)]
+        [RequestFormLimits(MultipartBodyLengthLimit = MediaFilePolicy.MaxRequestSize)]
         public async Task<IActionResult> Upload(IFormFile file)
         {
             if (file == null) return BadRequest(new { message = "No file uploaded" });
