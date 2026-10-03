@@ -10,11 +10,14 @@ namespace LetsLearn.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "FileName",
-                table: "Messages",
-                type: "text",
-                nullable: true);
+            migrationBuilder.Sql(@"
+                DO $$
+                BEGIN
+                    IF to_regclass('public.""Messages""') IS NOT NULL THEN
+                        ALTER TABLE ""Messages"" ADD COLUMN IF NOT EXISTS ""FileName"" text;
+                    END IF;
+                END $$;
+            ");
         }
 
         /// <inheritdoc />
