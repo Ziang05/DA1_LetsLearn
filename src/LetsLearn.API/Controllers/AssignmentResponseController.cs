@@ -26,7 +26,7 @@ namespace LetsLearn.API.Controllers
             dto.SubmittedAt = DateTime.UtcNow;
             dto.Mark = null;
 
-            var result = await _assignmentResponseService.CreateAssigmentResponseAsync(dto, userId);
+            var result = await _assignmentResponseService.CreateAssigmentResponseAsync(dto, userId, ct);
             return Ok(result);
         }
 

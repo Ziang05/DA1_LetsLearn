@@ -14,10 +14,14 @@ namespace LetsLearn.UseCases.Services.QuizResponseService
     public class QuizResponseService : IQuizResponseService
     {
         private readonly IUnitOfWork _unitOfWork;
+        private readonly ILearningProgressService _learningProgressService;
 
-        public QuizResponseService(IUnitOfWork unitOfWork)
+        public QuizResponseService(
+            IUnitOfWork unitOfWork,
+            ILearningProgressService learningProgressService)
         {
             _unitOfWork = unitOfWork;
+            _learningProgressService = learningProgressService;
         }
 
         private QuizResponseDTO ToDto(QuizResponse entity)
@@ -226,9 +230,39 @@ namespace LetsLearn.UseCases.Services.QuizResponseService
             }
 
             await _unitOfWork.QuizResponses.AddAsync(entity);
+            await _unitOfWork.LearningActivityLogs.AddAsync(new LearningActivityLog
+            {
+                Id = Guid.NewGuid(),
+                UserId = studentId,
+                CourseId = await ResolveCourseIdByTopicAsync(dto.TopicId, ct),
+                TopicId = dto.TopicId,
+                EventType = "quiz_submitted",
+                EventSource = "quiz_response",
+                Metadata = JsonSerializer.Serialize(new
+                {
+                    quizResponseId = entity.Id,
+                    status = entity.Status,
+                    answerCount = entity.Answers.Count,
+                    completedAt = entity.CompletedAt
+                }),
+                OccurredAt = DateTime.UtcNow
+            });
             await _unitOfWork.CommitAsync();
+            await _learningProgressService.MarkTopicCompletedAsync(dto.TopicId, studentId, "submit_quiz", ct);
 
             return ToDto(entity);
+        }
+
+        private async Task<string?> ResolveCourseIdByTopicAsync(Guid topicId, CancellationToken ct)
+        {
+            var topic = await _unitOfWork.Topics.GetByIdAsync(topicId, ct);
+            if (topic == null)
+            {
+                return null;
+            }
+
+            var section = await _unitOfWork.Sections.GetByIdAsync(topic.SectionId, ct);
+            return section?.CourseId;
         }
 
         // Test Case Estimation:

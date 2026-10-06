@@ -10,7 +10,7 @@ namespace LetsLearn.UseCases.ServiceInterfaces
     public interface IAssignmentResponseService
     {
         Task<AssignmentResponseDTO> GetAssigmentResponseByIdAsync(Guid id);
-        Task<AssignmentResponseDTO> CreateAssigmentResponseAsync(CreateAssignmentResponseRequest dto, Guid studentId);
+        Task<AssignmentResponseDTO> CreateAssigmentResponseAsync(CreateAssignmentResponseRequest dto, Guid studentId, CancellationToken ct = default);
         Task<IEnumerable<AssignmentResponseDTO>> GetAllAssigmentResponseByTopicIdAsync(Guid topicId);
         Task<IEnumerable<AssignmentResponseDTO>> GetAssigmentResponsesByTopicIdAndStudentIdAsync(Guid topicId, Guid studentId);
         Task<AssignmentResponseDTO> UpdateAssigmentResponseByIdAsync(Guid id, UpdateAssignmentResponseRequest dto);

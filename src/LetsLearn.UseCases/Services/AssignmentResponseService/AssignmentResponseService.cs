@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace LetsLearn.UseCases.Services.AssignmentResponseService
@@ -14,10 +15,14 @@ namespace LetsLearn.UseCases.Services.AssignmentResponseService
     public class AssignmentResponseService : IAssignmentResponseService
     {
         private readonly IUnitOfWork _unitOfWork;
+        private readonly ILearningProgressService _learningProgressService;
 
-        public AssignmentResponseService(IUnitOfWork unitOfWork)
+        public AssignmentResponseService(
+            IUnitOfWork unitOfWork,
+            ILearningProgressService learningProgressService)
         {
             _unitOfWork = unitOfWork;
+            _learningProgressService = learningProgressService;
         }
 
         private AssignmentResponseDTO ToDto(AssignmentResponse entity)
@@ -56,7 +61,7 @@ namespace LetsLearn.UseCases.Services.AssignmentResponseService
         // - foreach files → if files.Count > 0: +1
         // - DbUpdateException CommitAsync: +1
         // D = 2 => Minimum Test Cases = D + 1 = 3
-        public async Task<AssignmentResponseDTO> CreateAssigmentResponseAsync(CreateAssignmentResponseRequest dto, Guid studentId)
+        public async Task<AssignmentResponseDTO> CreateAssigmentResponseAsync(CreateAssignmentResponseRequest dto, Guid studentId, CancellationToken ct = default)
         {
             var entity = new AssignmentResponse
             {
@@ -85,9 +90,38 @@ namespace LetsLearn.UseCases.Services.AssignmentResponseService
 
             await _unitOfWork.AssignmentResponses.AddAsync(entity);
             await _unitOfWork.CloudinaryFiles.AddRangeAsync(entity.Files);
+            await _unitOfWork.LearningActivityLogs.AddAsync(new LearningActivityLog
+            {
+                Id = Guid.NewGuid(),
+                UserId = studentId,
+                CourseId = await ResolveCourseIdByTopicAsync(dto.TopicId, ct),
+                TopicId = dto.TopicId,
+                EventType = "assignment_submitted",
+                EventSource = "assignment_response",
+                Metadata = JsonSerializer.Serialize(new
+                {
+                    assignmentResponseId = entity.Id,
+                    fileCount = entity.Files.Count,
+                    submittedAt = entity.SubmittedAt
+                }),
+                OccurredAt = DateTime.UtcNow
+            });
             await _unitOfWork.CommitAsync();
+            await _learningProgressService.MarkTopicCompletedAsync(dto.TopicId, studentId, "submit_assignment", ct);
 
             return ToDto(entity);
+        }
+
+        private async Task<string?> ResolveCourseIdByTopicAsync(Guid topicId, CancellationToken ct)
+        {
+            var topic = await _unitOfWork.Topics.GetByIdAsync(topicId, ct);
+            if (topic == null)
+            {
+                return null;
+            }
+
+            var section = await _unitOfWork.Sections.GetByIdAsync(topic.SectionId, ct);
+            return section?.CourseId;
         }
 
         // Test Case Estimation:

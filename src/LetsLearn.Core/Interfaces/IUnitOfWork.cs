@@ -40,6 +40,9 @@ namespace LetsLearn.Core.Interfaces
         IRepository<AiQuestionGenerationJob> AiQuestionGenerationJobs { get; }
         IRepository<AiGeneratedQuestion> AiGeneratedQuestions { get; }
         IRepository<AiEvaluationResult> AiEvaluationResults { get; }
+        ILearningProgressRepository LearningProgresses { get; }
+        ITopicProgressRepository TopicProgresses { get; }
+        IRepository<LearningActivityLog> LearningActivityLogs { get; }
         Task<int> CommitAsync();
     }
 }

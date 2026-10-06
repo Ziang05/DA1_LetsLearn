@@ -3,6 +3,7 @@ using System;
 using LetsLearn.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LetsLearn.Infrastructure.Migrations
 {
     [DbContext(typeof(LetsLearnContext))]
-    partial class LetsLearnContextModelSnapshot : ModelSnapshot
+    [Migration("20261005064800_AddLearningProgress")]
+    partial class AddLearningProgress
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -357,49 +360,6 @@ namespace LetsLearn.Infrastructure.Migrations
                     b.HasIndex("CourseId");
 
                     b.ToTable("Enrollments");
-                });
-
-            modelBuilder.Entity("LetsLearn.Core.Entities.LearningActivityLog", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("CourseId")
-                        .HasColumnType("text");
-
-                    b.Property<string>("EventSource")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("EventType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("Metadata")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("OccurredAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("TopicId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EventType");
-
-                    b.HasIndex("CourseId", "OccurredAt");
-
-                    b.HasIndex("TopicId", "OccurredAt");
-
-                    b.HasIndex("UserId", "OccurredAt");
-
-                    b.ToTable("LearningActivityLogs");
                 });
 
             modelBuilder.Entity("LetsLearn.Core.Entities.LearningProgress", b =>
@@ -1214,25 +1174,6 @@ namespace LetsLearn.Infrastructure.Migrations
                         .WithMany("Enrollments")
                         .HasForeignKey("StudentId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("LetsLearn.Core.Entities.LearningActivityLog", b =>
-                {
-                    b.HasOne("LetsLearn.Core.Entities.Course", null)
-                        .WithMany()
-                        .HasForeignKey("CourseId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.HasOne("LetsLearn.Core.Entities.Topic", null)
-                        .WithMany()
-                        .HasForeignKey("TopicId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.HasOne("LetsLearn.Core.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 

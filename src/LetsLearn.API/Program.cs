@@ -100,6 +100,8 @@ builder.Services.AddScoped<IQuizResponseRepository, QuizResponseRepository>();
 builder.Services.AddScoped<IQuizResponseAnswerRepository, QuizResponseAnswerRepository>();
 builder.Services.AddScoped<IEnrollmentRepository, EnrollmentRepository>();
 builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
+builder.Services.AddScoped<ILearningProgressRepository, LearningProgressRepository>();
+builder.Services.AddScoped<ITopicProgressRepository, TopicProgressRepository>();
 
 //DI for custom services
 builder.Services.AddSingleton<ITokenService, TokenService>();
@@ -116,6 +118,7 @@ builder.Services.AddScoped<IQuizResponseService, QuizResponseService>();
 builder.Services.AddScoped<ISectionService, SectionService>();
 builder.Services.AddScoped<ITopicService, TopicService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<ILearningProgressService, LearningProgressService>();
 builder.Services.AddScoped<ICourseCloneService, CourseCloneService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IMediaService, MediaService>();

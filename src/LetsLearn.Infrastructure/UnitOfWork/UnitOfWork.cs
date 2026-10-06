@@ -50,6 +50,9 @@ namespace LetsLearn.Infrastructure.UnitOfWork
         public IRepository<AiQuestionGenerationJob> AiQuestionGenerationJobs { get; private set; }
         public IRepository<AiGeneratedQuestion> AiGeneratedQuestions { get; private set; }
         public IRepository<AiEvaluationResult> AiEvaluationResults { get; private set; }
+        public ILearningProgressRepository LearningProgresses { get; private set; }
+        public ITopicProgressRepository TopicProgresses { get; private set; }
+        public IRepository<LearningActivityLog> LearningActivityLogs { get; private set; }
         public UnitOfWork(LetsLearnContext context, ILogger<QuestionRepository> questionLogger)
         {
             _context = context;
@@ -85,6 +88,9 @@ namespace LetsLearn.Infrastructure.UnitOfWork
             AiQuestionGenerationJobs = new GenericRepository<AiQuestionGenerationJob>(_context);
             AiGeneratedQuestions = new GenericRepository<AiGeneratedQuestion>(_context);
             AiEvaluationResults = new GenericRepository<AiEvaluationResult>(_context);
+            LearningProgresses = new LearningProgressRepository(_context);
+            TopicProgresses = new TopicProgressRepository(_context);
+            LearningActivityLogs = new GenericRepository<LearningActivityLog>(_context);
         }
 
         public async Task<int> CommitAsync() =>
