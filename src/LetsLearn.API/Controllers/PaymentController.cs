@@ -122,7 +122,7 @@ namespace LetsLearn.API.Controllers
                         await _uow.CommitAsync();
                         
                         // Redirect to home page with status for notification
-                        var frontendUrl = "http://localhost:3000/"; 
+                        var frontendUrl = "http://localhost:3000/home"; 
                         return Redirect($"{frontendUrl}?paymentStatus={payment.Status}&courseId={payment.CourseId}");
                     }
                 }

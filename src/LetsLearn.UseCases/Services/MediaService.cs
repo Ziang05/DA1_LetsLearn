@@ -32,18 +32,18 @@ namespace LetsLearn.UseCases.Services
 
         public async Task<MediaUploadResponse> UploadFileAsync(IFormFile file)
         {
-            if (file == null || file.Length == 0)
-                throw new ArgumentException("File is empty");
+            var fileName = await MediaFilePolicy.ValidateAsync(file);
 
             using var stream = file.OpenReadStream();
-            var isImage = file.ContentType.StartsWith("image/");
+            var isImage = !MediaFilePolicy.IsArchive(fileName)
+                && file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
             UploadResult uploadResult;
 
             if (isImage)
             {
                 var uploadParams = new ImageUploadParams()
                 {
-                    File = new FileDescription(file.FileName, stream),
+                    File = new FileDescription(fileName, stream),
                     Folder = "LetsLearn",
                     UploadPreset = _uploadPreset
                 };
@@ -53,8 +53,10 @@ namespace LetsLearn.UseCases.Services
             {
                 var uploadParams = new RawUploadParams()
                 {
-                    File = new FileDescription(file.FileName, stream),
-                    Folder = "LetsLearn"
+                    File = new FileDescription(fileName, stream),
+                    Folder = "LetsLearn",
+                    // Raw assets need the extension in the public ID for downloads.
+                    PublicId = $"{Guid.NewGuid():N}{Path.GetExtension(fileName).ToLowerInvariant()}"
                 };
                 uploadResult = await _cloudinary.UploadAsync(uploadParams);
             }
@@ -66,7 +68,7 @@ namespace LetsLearn.UseCases.Services
 
             return new MediaUploadResponse
             {
-                Name = file.FileName,
+                Name = fileName,
                 DisplayUrl = uploadResult.SecureUrl.ToString(),
                 DownloadUrl = uploadResult.SecureUrl.ToString()
             };

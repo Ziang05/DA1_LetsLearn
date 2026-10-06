@@ -11,19 +11,15 @@ namespace LetsLearn.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            /*
-            migrationBuilder.AddColumn<string>(
-                name: "ImageUrl",
-                table: "Messages",
-                type: "text",
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "FileUrl",
-                table: "Messages",
-                type: "text",
-                nullable: true);
-            */
+            migrationBuilder.Sql(@"
+                DO $$
+                BEGIN
+                    IF to_regclass('public.""Messages""') IS NOT NULL THEN
+                        ALTER TABLE ""Messages"" ADD COLUMN IF NOT EXISTS ""ImageUrl"" text;
+                        ALTER TABLE ""Messages"" ADD COLUMN IF NOT EXISTS ""FileUrl"" text;
+                    END IF;
+                END $$;
+            ");
         }
 
         /// <inheritdoc />

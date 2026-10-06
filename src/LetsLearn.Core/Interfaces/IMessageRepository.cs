@@ -10,5 +10,6 @@ namespace LetsLearn.Core.Interfaces
     public interface IMessageRepository : IRepository<Message>
     {
         Task<IEnumerable<Message>> GetMessagesByConversationIdAsync(Guid conversationId);
+        Task<IReadOnlyList<Message>> GetRecentMessagesAsync(Guid conversationId, int limit, CancellationToken ct = default);
     }
 }
