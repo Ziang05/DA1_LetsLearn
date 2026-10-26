@@ -54,7 +54,26 @@ namespace LetsLearn.API.Controllers
         [HttpPut("{id}")]
         public async Task<ActionResult<QuizResponseDTO>> UpdateQuizResponseById([FromRoute] Guid id, [FromBody] QuizResponseRequest dto, CancellationToken ct = default)
         {
-            return Ok(await _quizResponseService.UpdateQuizResponseByIdAsync(id, dto, ct));
+            var userIdValue = User.Claims.FirstOrDefault(c => c.Type == "userID")?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId) || userId == Guid.Empty)
+                return Unauthorized();
+
+            try
+            {
+                return Ok(await _quizResponseService.UpdateQuizResponseByIdAsync(id, dto, userId, ct));
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
         [HttpGet]
         public async Task<ActionResult<List<QuizResponseDTO>>> GetQuizResponsesByTopic(

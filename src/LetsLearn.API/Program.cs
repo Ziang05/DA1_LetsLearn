@@ -120,6 +120,7 @@ builder.Services.AddScoped<ISectionService, SectionService>();
 builder.Services.AddScoped<ITopicService, TopicService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<ILearningProgressService, LearningProgressService>();
+builder.Services.AddScoped<ILearningRecommendationService, LearningRecommendationService>();
 builder.Services.AddScoped<ICourseCloneService, CourseCloneService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IMediaService, MediaService>();
