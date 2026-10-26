@@ -12,7 +12,13 @@ namespace LetsLearn.UseCases.Services.AiQuestionGeneration
     {
         public async Task<ExtractedDocument> ExtractAsync(IFormFile file, string savedPath, CancellationToken ct = default)
         {
-            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+            ArgumentNullException.ThrowIfNull(file);
+            return await ExtractAsync(file.FileName, savedPath, ct);
+        }
+
+        public async Task<ExtractedDocument> ExtractAsync(string fileName, string savedPath, CancellationToken ct = default)
+        {
+            var extension = Path.GetExtension(fileName).ToLowerInvariant();
             return extension switch
             {
                 ".txt" => await ExtractTextAsync(savedPath, ct),
@@ -40,6 +46,10 @@ namespace LetsLearn.UseCases.Services.AiQuestionGeneration
             using var archive = ZipFile.OpenRead(path);
             var documentEntry = archive.GetEntry("word/document.xml")
                 ?? throw new InvalidOperationException("Invalid docx file: word/document.xml was not found.");
+            if (documentEntry.Length > 25L * 1024 * 1024)
+            {
+                throw new InvalidOperationException("Invalid docx file: expanded document content exceeds the extraction limit.");
+            }
 
             using var stream = documentEntry.Open();
             var xml = XDocument.Load(stream);

@@ -43,6 +43,10 @@ namespace LetsLearn.Core.Interfaces
         ILearningProgressRepository LearningProgresses { get; }
         ITopicProgressRepository TopicProgresses { get; }
         IRepository<LearningActivityLog> LearningActivityLogs { get; }
+        IAssignmentRubricRepository AssignmentRubrics { get; }
+        IAiAssignmentGradingRepository AiAssignmentGradingJobs { get; }
+        IAiAssignmentGradeDraftRepository AiAssignmentGradeDrafts { get; }
         Task<int> CommitAsync();
+        Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken ct = default);
     }
 }

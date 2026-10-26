@@ -20,6 +20,7 @@ using LetsLearn.UseCases.Services.QuizResponseService;
 using LetsLearn.UseCases.Services.SectionSer;
 using LetsLearn.UseCases.Services.UserSer;
 using LetsLearn.UseCases.Services.AiQuestionGeneration;
+using LetsLearn.UseCases.Services.AiAssignmentGrading;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -124,18 +125,32 @@ builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IMediaService, MediaService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IDocumentTextExtractor, DocumentTextExtractor>();
+builder.Services.AddHttpClient("AssignmentSubmissionStorage")
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AllowAutoRedirect = false
+    });
+builder.Services.AddScoped<IAssignmentSubmissionExtractor, AssignmentSubmissionExtractor>();
+builder.Services.AddScoped<AssignmentGradingPromptBuilder>();
+builder.Services.AddScoped<AssignmentGradingResultValidator>();
+builder.Services.AddScoped<IAssignmentGradingService, AssignmentGradingService>();
+builder.Services.AddScoped<IAiAssignmentGradingJobService, AiAssignmentGradingJobService>();
+builder.Services.AddScoped<IAiAssignmentGradingJobProcessor, AiAssignmentGradingJobProcessor>();
+builder.Services.AddScoped<IAiAssignmentGradingReviewService, AiAssignmentGradingReviewService>();
 builder.Services.AddScoped<IDocumentChunkingService, DocumentChunkingService>();
 builder.Services.AddScoped<IAiLlmClient, AiLlmClient>();
 builder.Services.AddScoped<IAiEmbeddingClient, AiEmbeddingClient>();
 builder.Services.AddScoped<IAiVectorStore, PgvectorAiVectorStore>();
 builder.Services.AddSingleton<IAiQuotaService, AiQuotaService>();
 builder.Services.AddSingleton<IAiQuestionGenerationJobQueue, AiQuestionGenerationJobQueue>();
+builder.Services.AddSingleton<IAiAssignmentGradingJobQueue, AiAssignmentGradingJobQueue>();
 builder.Services.AddSingleton<IEmailQueue, EmailQueue>();
 builder.Services.AddScoped<IAiQuestionGenerationService, AiQuestionGenerationService>();
 builder.Services.AddScoped<IAiChatService, AiChatService>();
 
 builder.Services.AddHostedService<DeadlineReminderBackgroundService>();
 builder.Services.AddHostedService<AiQuestionGenerationBackgroundService>();
+builder.Services.AddHostedService<AiAssignmentGradingBackgroundService>();
 builder.Services.AddHostedService<EmailSendingBackgroundService>();
 
 builder.Services.AddSingleton<CourseFactory>();

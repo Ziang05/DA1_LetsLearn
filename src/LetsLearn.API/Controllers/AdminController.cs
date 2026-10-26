@@ -37,7 +37,7 @@ namespace LetsLearn.API.Controllers
             var dashboard = new AdminDashboardDTO
             {
                 TotalUsers = allUsers.Count(),
-                TotalStudents = allUsers.Count(u => u.Role == AppRoles.Student),
+                TotalStudents = allUsers.Count(u => AppRoles.IsStudent(u.Role)),
                 TotalTeachers = allUsers.Count(u => u.Role == AppRoles.Teacher),
                 TotalAdmins = allUsers.Count(u => u.Role == AppRoles.Admin),
                 TotalCourses = allCourses.Count(),
@@ -210,7 +210,7 @@ namespace LetsLearn.API.Controllers
             var stats = new UserStatisticsDTO
             {
                 TotalUsers = users.Count(),
-                StudentCount = users.Count(u => u.Role == AppRoles.Student),
+                StudentCount = users.Count(u => AppRoles.IsStudent(u.Role)),
                 TeacherCount = users.Count(u => u.Role == AppRoles.Teacher),
                 AdminCount = users.Count(u => u.Role == AppRoles.Admin),
                 NewUsersThisMonth = 0, // CreatedAt not available
