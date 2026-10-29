@@ -22,6 +22,191 @@ namespace LetsLearn.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("LetsLearn.Core.Entities.AiAssignmentGradeDraft", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CriterionResultsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("FinalFeedback")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("FinalScore")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("ImprovementsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ReviewComment")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("ReviewStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("pending");
+
+                    b.Property<int>("ReviewVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReviewedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("StrengthsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("StudySuggestionsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<decimal>("SuggestedScore")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("SummaryFeedback")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JobId")
+                        .IsUnique();
+
+                    b.HasIndex("ReviewStatus");
+
+                    b.HasIndex("ReviewedBy");
+
+                    b.ToTable("AiAssignmentGradeDrafts");
+                });
+
+            modelBuilder.Entity("LetsLearn.Core.Entities.AiAssignmentGradingJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AssignmentDescriptionSnapshot")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("AssignmentResponseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempt")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("AvailableAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("InputHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("LeaseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LeaseToken")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("PromptVersion")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RubricId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("RubricVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("queued");
+
+                    b.Property<string>("SubmissionHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SubmissionTextSnapshot")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InputHash")
+                        .IsUnique()
+                        .HasFilter("\"Status\" IN ('queued', 'processing', 'succeeded')");
+
+                    b.HasIndex("RequestHash")
+                        .IsUnique()
+                        .HasFilter("\"Status\" IN ('queued', 'processing', 'succeeded')");
+
+                    b.HasIndex("RequestedBy");
+
+                    b.HasIndex("RubricId");
+
+                    b.HasIndex("AssignmentResponseId", "CreatedAt");
+
+                    b.HasIndex("Status", "AvailableAt");
+
+                    b.HasIndex("Status", "CreatedAt");
+
+                    b.ToTable("AiAssignmentGradingJobs");
+                });
+
             modelBuilder.Entity("LetsLearn.Core.Entities.AiEvaluationResult", b =>
                 {
                     b.Property<Guid>("Id")
@@ -179,6 +364,7 @@ namespace LetsLearn.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<DateTime?>("GradedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("GradedBy")
@@ -196,12 +382,85 @@ namespace LetsLearn.Infrastructure.Migrations
                     b.Property<DateTime?>("SubmittedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("TeacherFeedback")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
                     b.Property<Guid>("TopicId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
                     b.ToTable("AssignmentResponses");
+                });
+
+            modelBuilder.Entity("LetsLearn.Core.Entities.AssignmentRubric", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("MaxScore")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("TeacherGuidance")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("TopicId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("TopicId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("AssignmentRubrics");
+                });
+
+            modelBuilder.Entity("LetsLearn.Core.Entities.AssignmentRubricCriterion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<decimal>("MaxScore")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("RubricId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RubricId", "SortOrder")
+                        .IsUnique();
+
+                    b.ToTable("AssignmentRubricCriteria");
                 });
 
             modelBuilder.Entity("LetsLearn.Core.Entities.CloudinaryFile", b =>
@@ -357,6 +616,95 @@ namespace LetsLearn.Infrastructure.Migrations
                     b.HasIndex("CourseId");
 
                     b.ToTable("Enrollments");
+                });
+
+            modelBuilder.Entity("LetsLearn.Core.Entities.LearningActivityLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CourseId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EventSource")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("TopicId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventType");
+
+                    b.HasIndex("CourseId", "OccurredAt");
+
+                    b.HasIndex("TopicId", "OccurredAt");
+
+                    b.HasIndex("UserId", "OccurredAt");
+
+                    b.ToTable("LearningActivityLogs");
+                });
+
+            modelBuilder.Entity("LetsLearn.Core.Entities.LearningProgress", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CompletedTopicCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CourseId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastActivityAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("ProgressPercent")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("StudentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("TotalTopicCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseId");
+
+                    b.HasIndex("StudentId");
+
+                    b.HasIndex("StudentId", "CourseId")
+                        .IsUnique();
+
+                    b.ToTable("LearningProgresses");
                 });
 
             modelBuilder.Entity("LetsLearn.Core.Entities.LectureChunk", b =>
@@ -876,6 +1224,55 @@ namespace LetsLearn.Infrastructure.Migrations
                     b.ToTable("TopicPages");
                 });
 
+            modelBuilder.Entity("LetsLearn.Core.Entities.TopicProgress", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CompletionSource")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("CourseId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("FirstAccessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastAccessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("StudentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TopicId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TopicId");
+
+                    b.HasIndex("CourseId", "StudentId");
+
+                    b.HasIndex("StudentId", "TopicId")
+                        .IsUnique();
+
+                    b.ToTable("TopicProgresses");
+                });
+
             modelBuilder.Entity("LetsLearn.Core.Entities.TopicQuiz", b =>
                 {
                     b.Property<Guid>("TopicId")
@@ -1011,6 +1408,43 @@ namespace LetsLearn.Infrastructure.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("LetsLearn.Core.Entities.AiAssignmentGradeDraft", b =>
+                {
+                    b.HasOne("LetsLearn.Core.Entities.AiAssignmentGradingJob", "Job")
+                        .WithOne("Draft")
+                        .HasForeignKey("LetsLearn.Core.Entities.AiAssignmentGradeDraft", "JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LetsLearn.Core.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedBy")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Job");
+                });
+
+            modelBuilder.Entity("LetsLearn.Core.Entities.AiAssignmentGradingJob", b =>
+                {
+                    b.HasOne("LetsLearn.Core.Entities.AssignmentResponse", null)
+                        .WithMany()
+                        .HasForeignKey("AssignmentResponseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LetsLearn.Core.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LetsLearn.Core.Entities.AssignmentRubric", null)
+                        .WithMany()
+                        .HasForeignKey("RubricId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("LetsLearn.Core.Entities.AiEvaluationResult", b =>
                 {
                     b.HasOne("LetsLearn.Core.Entities.AiGeneratedQuestion", null)
@@ -1025,6 +1459,30 @@ namespace LetsLearn.Infrastructure.Migrations
                     b.HasOne("LetsLearn.Core.Entities.AiQuestionGenerationJob", null)
                         .WithMany("Questions")
                         .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("LetsLearn.Core.Entities.AssignmentRubric", b =>
+                {
+                    b.HasOne("LetsLearn.Core.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LetsLearn.Core.Entities.Topic", null)
+                        .WithMany()
+                        .HasForeignKey("TopicId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("LetsLearn.Core.Entities.AssignmentRubricCriterion", b =>
+                {
+                    b.HasOne("LetsLearn.Core.Entities.AssignmentRubric", null)
+                        .WithMany("Criteria")
+                        .HasForeignKey("RubricId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -1076,6 +1534,40 @@ namespace LetsLearn.Infrastructure.Migrations
                         .WithMany("Enrollments")
                         .HasForeignKey("StudentId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("LetsLearn.Core.Entities.LearningActivityLog", b =>
+                {
+                    b.HasOne("LetsLearn.Core.Entities.Course", null)
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("LetsLearn.Core.Entities.Topic", null)
+                        .WithMany()
+                        .HasForeignKey("TopicId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("LetsLearn.Core.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("LetsLearn.Core.Entities.LearningProgress", b =>
+                {
+                    b.HasOne("LetsLearn.Core.Entities.Course", null)
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LetsLearn.Core.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -1198,6 +1690,27 @@ namespace LetsLearn.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("LetsLearn.Core.Entities.TopicProgress", b =>
+                {
+                    b.HasOne("LetsLearn.Core.Entities.Course", null)
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LetsLearn.Core.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LetsLearn.Core.Entities.Topic", null)
+                        .WithMany()
+                        .HasForeignKey("TopicId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("LetsLearn.Core.Entities.TopicQuiz", b =>
                 {
                     b.HasOne("LetsLearn.Core.Entities.Topic", null)
@@ -1225,6 +1738,11 @@ namespace LetsLearn.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("LetsLearn.Core.Entities.AiAssignmentGradingJob", b =>
+                {
+                    b.Navigation("Draft");
+                });
+
             modelBuilder.Entity("LetsLearn.Core.Entities.AiQuestionGenerationJob", b =>
                 {
                     b.Navigation("Questions");
@@ -1233,6 +1751,11 @@ namespace LetsLearn.Infrastructure.Migrations
             modelBuilder.Entity("LetsLearn.Core.Entities.AssignmentResponse", b =>
                 {
                     b.Navigation("Files");
+                });
+
+            modelBuilder.Entity("LetsLearn.Core.Entities.AssignmentRubric", b =>
+                {
+                    b.Navigation("Criteria");
                 });
 
             modelBuilder.Entity("LetsLearn.Core.Entities.Comment", b =>

@@ -423,6 +423,22 @@ namespace LetsLearn.UseCases.Services.CourseSer
                 course.TotalJoined += 1;
             }
 
+            await _uow.LearningActivityLogs.AddAsync(new LearningActivityLog
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                CourseId = courseId,
+                TopicId = null,
+                EventType = "course_enrolled",
+                EventSource = "course_enrollment",
+                Metadata = JsonSerializer.Serialize(new
+                {
+                    course.Title,
+                    user.Role
+                }),
+                OccurredAt = DateTime.UtcNow
+            });
+
             try
             {
                 await _uow.CommitAsync();

@@ -47,6 +47,13 @@ namespace LetsLearn.Infrastructure.Data
         public DbSet<AiQuestionGenerationJob> AiQuestionGenerationJobs { get; set; }
         public DbSet<AiGeneratedQuestion> AiGeneratedQuestions { get; set; }
         public DbSet<AiEvaluationResult> AiEvaluationResults { get; set; }
+        public DbSet<LearningProgress> LearningProgresses { get; set; }
+        public DbSet<TopicProgress> TopicProgresses { get; set; }
+        public DbSet<LearningActivityLog> LearningActivityLogs { get; set; }
+        public DbSet<AssignmentRubric> AssignmentRubrics { get; set; }
+        public DbSet<AssignmentRubricCriterion> AssignmentRubricCriteria { get; set; }
+        public DbSet<AiAssignmentGradingJob> AiAssignmentGradingJobs { get; set; }
+        public DbSet<AiAssignmentGradeDraft> AiAssignmentGradeDrafts { get; set; }
         #endregion
 
         #region OnModelCreating
@@ -174,6 +181,113 @@ namespace LetsLearn.Infrastructure.Data
                 .HasForeignKey(f => f.AssignmentResponseId)
                 .OnDelete(DeleteBehavior.Cascade); 
 
+            modelBuilder.Entity<AssignmentResponse>()
+                .Property(ar => ar.TeacherFeedback)
+                .HasMaxLength(4000);
+
+            modelBuilder.Entity<AssignmentResponse>()
+                .Property(ar => ar.GradedAt)
+                .IsConcurrencyToken();
+
+            modelBuilder.Entity<AssignmentRubric>(entity =>
+            {
+                entity.HasKey(rubric => rubric.Id);
+                entity.Property(rubric => rubric.MaxScore).HasPrecision(5, 2);
+                entity.Property(rubric => rubric.TeacherGuidance).HasColumnType("text");
+                entity.HasIndex(rubric => new { rubric.TopicId, rubric.Version }).IsUnique();
+                entity.HasOne<Topic>()
+                    .WithMany()
+                    .HasForeignKey(rubric => rubric.TopicId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne<User>()
+                    .WithMany()
+                    .HasForeignKey(rubric => rubric.CreatedBy)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasMany(rubric => rubric.Criteria)
+                    .WithOne()
+                    .HasForeignKey(criterion => criterion.RubricId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<AssignmentRubricCriterion>(entity =>
+            {
+                entity.HasKey(criterion => criterion.Id);
+                entity.Property(criterion => criterion.Name).HasMaxLength(200).IsRequired();
+                entity.Property(criterion => criterion.Description).HasMaxLength(2000).IsRequired();
+                entity.Property(criterion => criterion.MaxScore).HasPrecision(5, 2);
+                entity.HasIndex(criterion => new { criterion.RubricId, criterion.SortOrder }).IsUnique();
+            });
+
+            modelBuilder.Entity<AiAssignmentGradingJob>(entity =>
+            {
+                entity.HasKey(job => job.Id);
+                entity.Property(job => job.SubmissionHash).HasMaxLength(64).IsRequired();
+                entity.Property(job => job.InputHash).HasMaxLength(64).IsRequired();
+                entity.Property(job => job.RequestHash).HasMaxLength(64).IsRequired();
+                entity.Property(job => job.SubmissionTextSnapshot).HasColumnType("text").IsRequired();
+                entity.Property(job => job.AssignmentDescriptionSnapshot).HasColumnType("text").IsRequired();
+                entity.Property(job => job.PromptVersion).HasMaxLength(50).IsRequired();
+                entity.Property(job => job.Model).HasMaxLength(200).IsRequired();
+                entity.Property(job => job.Status)
+                    .HasMaxLength(20)
+                    .HasDefaultValue(AiAssignmentGradingJobStatuses.Queued)
+                    .IsRequired();
+                entity.Property(job => job.ErrorCode).HasMaxLength(100);
+                entity.Property(job => job.ErrorMessage).HasMaxLength(1000);
+                entity.HasIndex(job => new { job.AssignmentResponseId, job.CreatedAt });
+                entity.HasIndex(job => new { job.Status, job.CreatedAt });
+                entity.HasIndex(job => new { job.Status, job.AvailableAt });
+                entity.HasIndex(job => job.InputHash)
+                    .IsUnique()
+                    .HasFilter("\"Status\" IN ('queued', 'processing', 'succeeded')");
+                entity.HasIndex(job => job.RequestHash)
+                    .IsUnique()
+                    .HasFilter("\"Status\" IN ('queued', 'processing', 'succeeded')");
+                entity.HasOne<AssignmentResponse>()
+                    .WithMany()
+                    .HasForeignKey(job => job.AssignmentResponseId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne<AssignmentRubric>()
+                    .WithMany()
+                    .HasForeignKey(job => job.RubricId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne<User>()
+                    .WithMany()
+                    .HasForeignKey(job => job.RequestedBy)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(job => job.Draft)
+                    .WithOne(draft => draft.Job)
+                    .HasForeignKey<AiAssignmentGradeDraft>(draft => draft.JobId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<AiAssignmentGradeDraft>(entity =>
+            {
+                entity.HasKey(draft => draft.Id);
+                entity.Property(draft => draft.SuggestedScore).HasPrecision(5, 2);
+                entity.Property(draft => draft.FinalScore).HasPrecision(5, 2);
+                entity.Property(draft => draft.CriterionResultsJson).HasColumnType("jsonb").IsRequired();
+                entity.Property(draft => draft.StrengthsJson).HasColumnType("jsonb").IsRequired();
+                entity.Property(draft => draft.ImprovementsJson).HasColumnType("jsonb").IsRequired();
+                entity.Property(draft => draft.StudySuggestionsJson).HasColumnType("jsonb").IsRequired();
+                entity.Property(draft => draft.SummaryFeedback).HasColumnType("text").IsRequired();
+                entity.Property(draft => draft.FinalFeedback).HasColumnType("text");
+                entity.Property(draft => draft.ReviewComment).HasMaxLength(2000);
+                entity.Property(draft => draft.ReviewStatus)
+                    .HasMaxLength(20)
+                    .HasDefaultValue(AiAssignmentGradeReviewStatuses.Pending)
+                    .IsRequired();
+                entity.Property(draft => draft.ReviewVersion)
+                    .HasDefaultValue(1)
+                    .IsConcurrencyToken();
+                entity.HasIndex(draft => draft.JobId).IsUnique();
+                entity.HasIndex(draft => draft.ReviewStatus);
+                entity.HasOne<User>()
+                    .WithMany()
+                    .HasForeignKey(draft => draft.ReviewedBy)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
             // ===== Conversation =====
             modelBuilder.Entity<Conversation>()
                 .HasMany(c => c.Messages).WithOne()
@@ -251,6 +365,112 @@ namespace LetsLearn.Infrastructure.Data
                 .HasOne<AiGeneratedQuestion>()
                 .WithMany()
                 .HasForeignKey(e => e.GeneratedQuestionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // ===== Learning progress =====
+            modelBuilder.Entity<LearningProgress>()
+                .HasKey(lp => lp.Id);
+
+            modelBuilder.Entity<LearningProgress>()
+                .HasIndex(lp => new { lp.StudentId, lp.CourseId })
+                .IsUnique();
+
+            modelBuilder.Entity<LearningProgress>()
+                .HasIndex(lp => lp.CourseId);
+
+            modelBuilder.Entity<LearningProgress>()
+                .HasIndex(lp => lp.StudentId);
+
+            modelBuilder.Entity<LearningProgress>()
+                .HasOne<User>()
+                .WithMany()
+                .HasForeignKey(lp => lp.StudentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<LearningProgress>()
+                .HasOne<Course>()
+                .WithMany()
+                .HasForeignKey(lp => lp.CourseId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<TopicProgress>()
+                .HasKey(tp => tp.Id);
+
+            modelBuilder.Entity<TopicProgress>()
+                .HasIndex(tp => new { tp.StudentId, tp.TopicId })
+                .IsUnique();
+
+            modelBuilder.Entity<TopicProgress>()
+                .HasIndex(tp => new { tp.CourseId, tp.StudentId });
+
+            modelBuilder.Entity<TopicProgress>()
+                .HasIndex(tp => tp.TopicId);
+
+            modelBuilder.Entity<TopicProgress>()
+                .Property(tp => tp.Status)
+                .HasMaxLength(50);
+
+            modelBuilder.Entity<TopicProgress>()
+                .Property(tp => tp.CompletionSource)
+                .HasMaxLength(50);
+
+            modelBuilder.Entity<TopicProgress>()
+                .HasOne<User>()
+                .WithMany()
+                .HasForeignKey(tp => tp.StudentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<TopicProgress>()
+                .HasOne<Course>()
+                .WithMany()
+                .HasForeignKey(tp => tp.CourseId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<TopicProgress>()
+                .HasOne<Topic>()
+                .WithMany()
+                .HasForeignKey(tp => tp.TopicId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<LearningActivityLog>()
+                .HasKey(log => log.Id);
+
+            modelBuilder.Entity<LearningActivityLog>()
+                .Property(log => log.EventType)
+                .HasMaxLength(50);
+
+            modelBuilder.Entity<LearningActivityLog>()
+                .Property(log => log.EventSource)
+                .HasMaxLength(50);
+
+            modelBuilder.Entity<LearningActivityLog>()
+                .HasIndex(log => new { log.UserId, log.OccurredAt });
+
+            modelBuilder.Entity<LearningActivityLog>()
+                .HasIndex(log => new { log.CourseId, log.OccurredAt });
+
+            modelBuilder.Entity<LearningActivityLog>()
+                .HasIndex(log => new { log.TopicId, log.OccurredAt });
+
+            modelBuilder.Entity<LearningActivityLog>()
+                .HasIndex(log => log.EventType);
+
+            modelBuilder.Entity<LearningActivityLog>()
+                .HasOne<User>()
+                .WithMany()
+                .HasForeignKey(log => log.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<LearningActivityLog>()
+                .HasOne<Course>()
+                .WithMany()
+                .HasForeignKey(log => log.CourseId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<LearningActivityLog>()
+                .HasOne<Topic>()
+                .WithMany()
+                .HasForeignKey(log => log.TopicId)
                 .OnDelete(DeleteBehavior.Cascade);
         }
 

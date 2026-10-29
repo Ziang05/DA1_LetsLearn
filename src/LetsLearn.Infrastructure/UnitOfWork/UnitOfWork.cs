@@ -50,6 +50,12 @@ namespace LetsLearn.Infrastructure.UnitOfWork
         public IRepository<AiQuestionGenerationJob> AiQuestionGenerationJobs { get; private set; }
         public IRepository<AiGeneratedQuestion> AiGeneratedQuestions { get; private set; }
         public IRepository<AiEvaluationResult> AiEvaluationResults { get; private set; }
+        public ILearningProgressRepository LearningProgresses { get; private set; }
+        public ITopicProgressRepository TopicProgresses { get; private set; }
+        public IRepository<LearningActivityLog> LearningActivityLogs { get; private set; }
+        public IAssignmentRubricRepository AssignmentRubrics { get; private set; }
+        public IAiAssignmentGradingRepository AiAssignmentGradingJobs { get; private set; }
+        public IAiAssignmentGradeDraftRepository AiAssignmentGradeDrafts { get; private set; }
         public UnitOfWork(LetsLearnContext context, ILogger<QuestionRepository> questionLogger)
         {
             _context = context;
@@ -85,10 +91,36 @@ namespace LetsLearn.Infrastructure.UnitOfWork
             AiQuestionGenerationJobs = new GenericRepository<AiQuestionGenerationJob>(_context);
             AiGeneratedQuestions = new GenericRepository<AiGeneratedQuestion>(_context);
             AiEvaluationResults = new GenericRepository<AiEvaluationResult>(_context);
+            LearningProgresses = new LearningProgressRepository(_context);
+            TopicProgresses = new TopicProgressRepository(_context);
+            LearningActivityLogs = new GenericRepository<LearningActivityLog>(_context);
+            AssignmentRubrics = new AssignmentRubricRepository(_context);
+            AiAssignmentGradingJobs = new AiAssignmentGradingRepository(_context);
+            AiAssignmentGradeDrafts = new AiAssignmentGradeDraftRepository(_context);
         }
 
         public async Task<int> CommitAsync() =>
             await _context.SaveChangesAsync();
+
+        public async Task<T> ExecuteInTransactionAsync<T>(
+            Func<CancellationToken, Task<T>> operation,
+            CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(operation);
+            await using var transaction = await _context.Database.BeginTransactionAsync(ct);
+            try
+            {
+                var result = await operation(ct);
+                await _context.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+                return result;
+            }
+            catch
+            {
+                await transaction.RollbackAsync(ct);
+                throw;
+            }
+        }
 
         public async ValueTask DisposeAsync() =>
             await _context.DisposeAsync();

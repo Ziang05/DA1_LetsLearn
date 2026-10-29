@@ -11,7 +11,7 @@ namespace LetsLearn.UseCases.DTOs
     {
         public Guid TopicId { get; set; }
         public Guid StudentId { get; set; } 
-        public AssignmentResponseData Data { get; set; }
+        public AssignmentResponseData Data { get; set; } = new();
     }
 
     //public class CreateAssignmentResponseRequest
@@ -26,7 +26,7 @@ namespace LetsLearn.UseCases.DTOs
         public Guid TopicId { get; set; }
         public Guid StudentId { get; set; }
 
-        public AssignmentResponseData Data { get; set; }
+        public AssignmentResponseData Data { get; set; } = new();
     }
 
     public class AssignmentResponseData
@@ -35,6 +35,9 @@ namespace LetsLearn.UseCases.DTOs
         public List<CloudinaryFile> Files { get; set; } = new();
         public decimal? Mark { get; set; }
         public string? Note { get; set; }
+        public string? TeacherFeedback { get; set; }
+        public DateTime? GradedAt { get; set; }
+        public Guid? GradedBy { get; set; }
     }
 
     public class CreateAssignmentResponseRequest
@@ -44,6 +47,12 @@ namespace LetsLearn.UseCases.DTOs
         public List<CreateCloudinaryFileRequest> CloudinaryFiles { get; set; } = new();
         public decimal? Mark { get; set; }
         public string? Note { get; set; }
+    }
+
+    public class GradeAssignmentResponseRequest
+    {
+        public decimal? Mark { get; set; }
+        public string? TeacherFeedback { get; set; }
     }
 
     public class CreateCloudinaryFileRequest

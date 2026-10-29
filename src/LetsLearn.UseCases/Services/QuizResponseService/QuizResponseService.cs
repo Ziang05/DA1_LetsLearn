@@ -14,10 +14,14 @@ namespace LetsLearn.UseCases.Services.QuizResponseService
     public class QuizResponseService : IQuizResponseService
     {
         private readonly IUnitOfWork _unitOfWork;
+        private readonly ILearningProgressService _learningProgressService;
 
-        public QuizResponseService(IUnitOfWork unitOfWork)
+        public QuizResponseService(
+            IUnitOfWork unitOfWork,
+            ILearningProgressService learningProgressService)
         {
             _unitOfWork = unitOfWork;
+            _learningProgressService = learningProgressService;
         }
 
         private QuizResponseDTO ToDto(QuizResponse entity)
@@ -128,6 +132,9 @@ namespace LetsLearn.UseCases.Services.QuizResponseService
         // D = 3 => Minimum Test Cases = D + 1 = 4
         public async Task<QuizResponseDTO> CreateQuizResponseAsync(QuizResponseRequest dto, Guid studentId, CancellationToken ct = default)
         {
+            var quiz = await _unitOfWork.TopicQuizzes.GetWithQuestionsAsync(dto.TopicId)
+                ?? throw new KeyNotFoundException($"Quiz topic {dto.TopicId} not found.");
+
             var entity = new QuizResponse
             {
                 Id = Guid.NewGuid(),
@@ -141,79 +148,9 @@ namespace LetsLearn.UseCases.Services.QuizResponseService
 
             foreach (var a in dto.Data.Answers)
             {
-                // Load câu hỏi từ TopicQuizQuestion
-                var topicQuestionEntity = await _unitOfWork.TopicQuizQuestions.GetByIdAsync(a.TopicQuizQuestionId);
-                if (topicQuestionEntity == null)
-                    throw new Exception($"TopicQuizQuestion {a.TopicQuizQuestionId} not found");
-
-                // 🔥 THÊM: Load từ Question Bank để có feedback đầy đủ
-                Question fullQuestion = null;
-
-                // Try to find the original question in Question Bank by matching content
-                var allQuestions = await _unitOfWork.Questions.FindAsync(q =>
-                    q.QuestionText == topicQuestionEntity.QuestionText &&
-                    q.Type == topicQuestionEntity.Type);
-
-                var originalQuestion = allQuestions.FirstOrDefault();
-
-                if (originalQuestion != null)
-                {
-                    // Use data from Question Bank (has feedback)
-                    fullQuestion = new Question
-                    {
-                        Id = topicQuestionEntity.Id,  // Keep TopicQuizQuestion ID for reference
-                        QuestionName = originalQuestion.QuestionName,
-                        QuestionText = originalQuestion.QuestionText,
-                        Status = originalQuestion.Status,
-                        Type = originalQuestion.Type,
-                        DefaultMark = originalQuestion.DefaultMark,
-                        Usage = originalQuestion.Usage ?? 0,
-                        FeedbackOfTrue = originalQuestion.FeedbackOfTrue,      // ✅ From Question Bank
-                        FeedbackOfFalse = originalQuestion.FeedbackOfFalse,    // ✅ From Question Bank
-                        CorrectAnswer = originalQuestion.CorrectAnswer,
-                        Multiple = originalQuestion.Multiple,
-                        CreatedById = originalQuestion.CreatedById,
-                        ModifiedById = originalQuestion.ModifiedById,
-                        CourseId = originalQuestion.CourseId,
-                        Choices = originalQuestion.Choices.Select(c => new QuestionChoice
-                        {
-                            Id = c.Id,
-                            QuestionId = topicQuestionEntity.Id,
-                            Text = c.Text,
-                            GradePercent = c.GradePercent,
-                            Feedback = c.Feedback                              // ✅ From Question Bank
-                        }).ToList()
-                    };
-                }
-                else
-                {
-                    // Fallback to TopicQuizQuestion data if no match found
-                    fullQuestion = new Question
-                    {
-                        Id = topicQuestionEntity.Id,
-                        QuestionName = topicQuestionEntity.QuestionName,
-                        QuestionText = topicQuestionEntity.QuestionText,
-                        Status = null,
-                        Type = topicQuestionEntity.Type,
-                        DefaultMark = topicQuestionEntity.DefaultMark,
-                        Usage = 0,
-                        FeedbackOfTrue = topicQuestionEntity.FeedbackOfTrue,
-                        FeedbackOfFalse = topicQuestionEntity.FeedbackOfFalse,
-                        CorrectAnswer = topicQuestionEntity.CorrectAnswer ?? false,
-                        Multiple = topicQuestionEntity.Multiple ?? false,
-                        CreatedById = Guid.Empty,
-                        ModifiedById = null,
-                        CourseId = "",
-                        Choices = topicQuestionEntity.Choices.Select(c => new QuestionChoice
-                        {
-                            Id = c.Id,
-                            QuestionId = topicQuestionEntity.Id,
-                            Text = c.Text,
-                            GradePercent = c.GradePercent,
-                            Feedback = c.Feedback
-                        }).ToList()
-                    };
-                }
+                var topicQuestionEntity = quiz.Questions.FirstOrDefault(question => question.Id == a.TopicQuizQuestionId)
+                    ?? throw new ArgumentException($"Question {a.TopicQuizQuestionId} does not belong to quiz {dto.TopicId}.");
+                var fullQuestion = CreateQuizQuestionSnapshot(topicQuestionEntity);
 
                 entity.Answers.Add(new QuizResponseAnswer
                 {
@@ -221,14 +158,44 @@ namespace LetsLearn.UseCases.Services.QuizResponseService
                     QuizResponseId = entity.Id,
                     Question = JsonSerializer.Serialize(fullQuestion),
                     Answer = a.Answer,
-                    Mark = a.Mark
+                    Mark = QuizAnswerScorer.CalculateMark(fullQuestion, a.Answer) ?? 0m
                 });
             }
 
             await _unitOfWork.QuizResponses.AddAsync(entity);
+            await _unitOfWork.LearningActivityLogs.AddAsync(new LearningActivityLog
+            {
+                Id = Guid.NewGuid(),
+                UserId = studentId,
+                CourseId = await ResolveCourseIdByTopicAsync(dto.TopicId, ct),
+                TopicId = dto.TopicId,
+                EventType = "quiz_submitted",
+                EventSource = "quiz_response",
+                Metadata = JsonSerializer.Serialize(new
+                {
+                    quizResponseId = entity.Id,
+                    status = entity.Status,
+                    answerCount = entity.Answers.Count,
+                    completedAt = entity.CompletedAt
+                }),
+                OccurredAt = DateTime.UtcNow
+            });
             await _unitOfWork.CommitAsync();
+            await _learningProgressService.MarkTopicCompletedAsync(dto.TopicId, studentId, "submit_quiz", ct);
 
             return ToDto(entity);
+        }
+
+        private async Task<string?> ResolveCourseIdByTopicAsync(Guid topicId, CancellationToken ct)
+        {
+            var topic = await _unitOfWork.Topics.GetByIdAsync(topicId, ct);
+            if (topic == null)
+            {
+                return null;
+            }
+
+            var section = await _unitOfWork.Sections.GetByIdAsync(topic.SectionId, ct);
+            return section?.CourseId;
         }
 
         // Test Case Estimation:
@@ -239,11 +206,18 @@ namespace LetsLearn.UseCases.Services.QuizResponseService
         // - foreach new answer → add item: +1
         // - DbUpdateException when CommitAsync: +1
         // D = 5 => Minimum Test Cases = D + 1 = 6
-        public async Task<QuizResponseDTO> UpdateQuizResponseByIdAsync(Guid id, QuizResponseRequest dto, CancellationToken ct = default)
+        public async Task<QuizResponseDTO> UpdateQuizResponseByIdAsync(Guid id, QuizResponseRequest dto, Guid studentId, CancellationToken ct = default)
         {
             var entity = await _unitOfWork.QuizResponses.GetByIdTrackedWithAnswersAsync(id,ct);
             if (entity == null)
                 throw new Exception("Quiz response not found");
+            if (entity.StudentId != studentId)
+                throw new UnauthorizedAccessException("You can only update your own quiz attempt.");
+            if (entity.TopicId != dto.TopicId)
+                throw new ArgumentException("The quiz topic cannot be changed for an existing attempt.");
+
+            var quiz = await _unitOfWork.TopicQuizzes.GetWithQuestionsAsync(entity.TopicId)
+                ?? throw new KeyNotFoundException($"Quiz topic {entity.TopicId} not found.");
 
             entity.Status = dto.Data.Status;
             entity.StartedAt = dto.Data.StartedAt;
@@ -254,34 +228,9 @@ namespace LetsLearn.UseCases.Services.QuizResponseService
 
             foreach (var a in dto.Data.Answers)
             {
-                var questionEntity = await _unitOfWork.TopicQuizQuestions.GetByIdAsync(a.TopicQuizQuestionId)
-                    ?? throw new Exception($"TopicQuizQuestion {a.TopicQuizQuestionId} not found");
-
-                var fullQuestion = new Question
-                {
-                    Id = questionEntity.Id,
-                    QuestionName = questionEntity.QuestionName,
-                    QuestionText = questionEntity.QuestionText,
-                    Status = null,
-                    Type = questionEntity.Type,
-                    DefaultMark = questionEntity.DefaultMark,
-                    Usage = 0,
-                    FeedbackOfTrue = questionEntity.FeedbackOfTrue,
-                    FeedbackOfFalse = questionEntity.FeedbackOfFalse,
-                    CorrectAnswer = questionEntity.CorrectAnswer ?? false,
-                    Multiple = questionEntity.Multiple ?? false,
-                    CreatedById = Guid.Empty,
-                    ModifiedById = null,
-                    CourseId = "",
-                    Choices = questionEntity.Choices.Select(c => new QuestionChoice
-                    {
-                        Id = c.Id,
-                        QuestionId = questionEntity.Id,
-                        Text = c.Text,
-                        GradePercent = c.GradePercent,
-                        Feedback = c.Feedback
-                    }).ToList()
-                };
+                var questionEntity = quiz.Questions.FirstOrDefault(question => question.Id == a.TopicQuizQuestionId)
+                    ?? throw new ArgumentException($"Question {a.TopicQuizQuestionId} does not belong to quiz {entity.TopicId}.");
+                var fullQuestion = CreateQuizQuestionSnapshot(questionEntity);
 
                 entity.Answers.Add(new QuizResponseAnswer
                 {
@@ -289,7 +238,7 @@ namespace LetsLearn.UseCases.Services.QuizResponseService
                     QuizResponseId = entity.Id,
                     Question = JsonSerializer.Serialize(fullQuestion),
                     Answer = a.Answer,
-                    Mark = a.Mark
+                    Mark = QuizAnswerScorer.CalculateMark(fullQuestion, a.Answer) ?? 0m
                 });
             }
 
@@ -297,6 +246,27 @@ namespace LetsLearn.UseCases.Services.QuizResponseService
 
             return ToDto(entity);
         }
+
+        private static Question CreateQuizQuestionSnapshot(TopicQuizQuestion topicQuestion) => new()
+        {
+            Id = topicQuestion.Id,
+            QuestionName = topicQuestion.QuestionName,
+            QuestionText = topicQuestion.QuestionText,
+            Type = topicQuestion.Type,
+            DefaultMark = topicQuestion.DefaultMark,
+            FeedbackOfTrue = topicQuestion.FeedbackOfTrue,
+            FeedbackOfFalse = topicQuestion.FeedbackOfFalse,
+            CorrectAnswer = topicQuestion.CorrectAnswer ?? false,
+            Multiple = topicQuestion.Multiple ?? false,
+            Choices = topicQuestion.Choices.Select(choice => new QuestionChoice
+            {
+                Id = choice.Id,
+                QuestionId = topicQuestion.Id,
+                Text = choice.Text,
+                GradePercent = choice.GradePercent,
+                Feedback = choice.Feedback
+            }).ToList()
+        };
 
         // Test Case Estimation:
         // Decision points (D):

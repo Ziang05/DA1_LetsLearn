@@ -107,6 +107,7 @@ namespace LetsLearn.Core.Entities
         public DateTime? SubmittedAt { get; set; }
         public string? Note { get; set; }
         public decimal? Mark { get; set; }
+        public string? TeacherFeedback { get; set; }
         public DateTime? GradedAt { get; set; }
         public Guid? GradedBy { get; set; }       // UUID FK -> users.id
         public ICollection<CloudinaryFile> Files { get; set; } = new List<CloudinaryFile>();

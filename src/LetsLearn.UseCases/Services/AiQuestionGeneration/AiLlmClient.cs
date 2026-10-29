@@ -18,18 +18,43 @@ namespace LetsLearn.UseCases.Services.AiQuestionGeneration
             _logger = logger;
         }
 
-        public async Task<string?> GenerateJsonAsync(string systemPrompt, string userPrompt, decimal temperature, CancellationToken ct = default, string modelConfigKey = "GeneratorModel")
+        public Task<string?> GenerateJsonAsync(
+            string systemPrompt,
+            string userPrompt,
+            decimal temperature,
+            CancellationToken ct = default,
+            string modelConfigKey = "GeneratorModel") =>
+            GenerateJsonInternalAsync(systemPrompt, userPrompt, temperature, ct, modelConfigKey, requestTimeout: null, modelOverride: null);
+
+        public Task<string?> GenerateJsonWithOptionsAsync(
+            string systemPrompt,
+            string userPrompt,
+            decimal temperature,
+            CancellationToken ct,
+            string modelConfigKey,
+            TimeSpan requestTimeout,
+            string modelOverride) =>
+            GenerateJsonInternalAsync(systemPrompt, userPrompt, temperature, ct, modelConfigKey, requestTimeout, modelOverride);
+
+        private async Task<string?> GenerateJsonInternalAsync(
+            string systemPrompt,
+            string userPrompt,
+            decimal temperature,
+            CancellationToken ct,
+            string modelConfigKey,
+            TimeSpan? requestTimeout,
+            string? modelOverride)
         {
             var provider = _configuration["AI:Provider"] ?? "Gemini";
             if (provider.Equals("Gemini", StringComparison.OrdinalIgnoreCase))
             {
-                return await GenerateGeminiJsonAsync(systemPrompt, userPrompt, temperature, modelConfigKey, ct);
+                return await GenerateGeminiJsonAsync(systemPrompt, userPrompt, temperature, modelConfigKey, ct, requestTimeout, modelOverride);
             }
 
-            return await GenerateOpenAiCompatibleJsonAsync(systemPrompt, userPrompt, temperature, modelConfigKey, ct);
+            return await GenerateOpenAiCompatibleJsonAsync(systemPrompt, userPrompt, temperature, modelConfigKey, ct, requestTimeout, modelOverride);
         }
 
-        private async Task<string?> GenerateGeminiJsonAsync(string systemPrompt, string userPrompt, decimal temperature, string modelConfigKey, CancellationToken ct)
+        private async Task<string?> GenerateGeminiJsonAsync(string systemPrompt, string userPrompt, decimal temperature, string modelConfigKey, CancellationToken ct, TimeSpan? requestTimeout, string? modelOverride)
         {
             var apiKey = _configuration["AI:ApiKey"];
             if (string.IsNullOrWhiteSpace(apiKey))
@@ -39,10 +64,33 @@ namespace LetsLearn.UseCases.Services.AiQuestionGeneration
             }
 
             var baseUrl = _configuration["AI:BaseUrl"] ?? "https://generativelanguage.googleapis.com/v1beta";
-            var model = _configuration[$"AI:{modelConfigKey}"] ?? _configuration["AI:GeneratorModel"] ?? "gemini-2.5-flash";
+            var model = modelOverride ?? _configuration[$"AI:{modelConfigKey}"] ?? _configuration["AI:GeneratorModel"] ?? "gemini-2.5-flash";
             _logger.LogInformation("[AI Questions] Calling Gemini generateContent. Model={Model}, ModelConfigKey={ModelConfigKey}, Temperature={Temperature}", model, modelConfigKey, temperature);
 
-            using var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(3) };
+            using var httpClient = new HttpClient { Timeout = requestTimeout ?? TimeSpan.FromMinutes(3) };
+
+            var generationConfig = new Dictionary<string, object>
+            {
+                ["responseMimeType"] = "application/json"
+            };
+            // Gemini 3 and newer models reject legacy sampling parameters such as temperature.
+            if (!model.StartsWith("gemini-3", StringComparison.OrdinalIgnoreCase))
+            {
+                generationConfig["temperature"] = temperature;
+            }
+            else
+            {
+                // Gemini 3 defaults to medium thinking, which can exceed the grading deadline.
+                var thinkingLevel = model.Contains("flash-lite", StringComparison.OrdinalIgnoreCase)
+                    ? "minimal"
+                    : "low";
+                generationConfig["thinkingConfig"] = new { thinkingLevel };
+            }
+
+            if (string.Equals(modelConfigKey, "AssignmentGradingModel", StringComparison.Ordinal))
+            {
+                generationConfig["responseSchema"] = BuildAssignmentGradingResponseSchema();
+            }
 
             var payload = new
             {
@@ -58,16 +106,14 @@ namespace LetsLearn.UseCases.Services.AiQuestionGeneration
                         parts = new[] { new { text = userPrompt } }
                     }
                 },
-                generationConfig = new
-                {
-                    temperature,
-                    responseMimeType = "application/json"
-                }
+                generationConfig
             };
 
             var json = JsonSerializer.Serialize(payload);
             using var content = new StringContent(json, Encoding.UTF8, "application/json");
-            const int maxRetries = 2;
+            // Grading supplies a deadline and opts out of the long retry policy used by
+            // question generation. A retry can be added there only when it fits the job deadline.
+            var maxRetries = requestTimeout.HasValue ? 0 : 2;
             for (int attempt = 0; attempt <= maxRetries; attempt++)
             {
                 // Cần tạo mới content mỗi lần vì HttpContent chỉ dùng được 1 lần
@@ -78,12 +124,23 @@ namespace LetsLearn.UseCases.Services.AiQuestionGeneration
                 {
                     var responseJson = await response.Content.ReadAsStringAsync(ct);
                     using var doc = JsonDocument.Parse(responseJson);
-                    var text = doc.RootElement
+                    var candidate = doc.RootElement
                         .GetProperty("candidates")[0]
-                        .GetProperty("content")
-                        .GetProperty("parts")[0]
-                        .GetProperty("text")
-                        .GetString();
+                        .GetProperty("content");
+                    var textBuilder = new StringBuilder();
+                    foreach (var part in candidate.GetProperty("parts").EnumerateArray())
+                    {
+                        if (part.TryGetProperty("thought", out var thought) && thought.ValueKind == JsonValueKind.True)
+                        {
+                            continue;
+                        }
+
+                        if (part.TryGetProperty("text", out var textPart) && textPart.ValueKind == JsonValueKind.String)
+                        {
+                            textBuilder.Append(textPart.GetString());
+                        }
+                    }
+                    var text = textBuilder.Length == 0 ? null : textBuilder.ToString();
                     _logger.LogInformation("[AI Questions] Gemini generateContent succeeded. Model={Model}, ResponseChars={ResponseChars}", model, text?.Length ?? 0);
                     return text;
                 }
@@ -100,11 +157,51 @@ namespace LetsLearn.UseCases.Services.AiQuestionGeneration
                     continue;
                 }
 
-                _logger.LogError("[AI Questions] Gemini generateContent failed. StatusCode={StatusCode}, Model={Model}, Error={Error}", (int)response.StatusCode, model, error);
-                throw new InvalidOperationException($"Gemini returned {(int)response.StatusCode}: {error}");
+                _logger.LogError("[AI Questions] Gemini generateContent failed. StatusCode={StatusCode}, Model={Model}", (int)response.StatusCode, model);
+                throw new InvalidOperationException($"Gemini returned {(int)response.StatusCode}.");
             }
 
             throw new InvalidOperationException("Gemini request failed after retries.");
+        }
+
+        private static Dictionary<string, object> BuildAssignmentGradingResponseSchema()
+        {
+            static Dictionary<string, object> ObjectSchema(Dictionary<string, object> properties, params string[] required) => new()
+            {
+                ["type"] = "OBJECT",
+                ["properties"] = properties,
+                ["required"] = required
+            };
+
+            static Dictionary<string, object> ArraySchema(object items) => new()
+            {
+                ["type"] = "ARRAY",
+                ["items"] = items
+            };
+
+            static Dictionary<string, object> StringSchema() => new() { ["type"] = "STRING" };
+
+            var evidenceSchema = ObjectSchema(new Dictionary<string, object>
+            {
+                ["quote"] = StringSchema(),
+                ["page"] = new Dictionary<string, object> { ["type"] = "INTEGER", ["nullable"] = true }
+            }, "quote", "page");
+            var criterionSchema = ObjectSchema(new Dictionary<string, object>
+            {
+                ["criterionId"] = new Dictionary<string, object> { ["type"] = "STRING", ["format"] = "uuid" },
+                ["score"] = new Dictionary<string, object> { ["type"] = "NUMBER", ["minimum"] = 0 },
+                ["feedback"] = StringSchema(),
+                ["evidence"] = ArraySchema(evidenceSchema)
+            }, "criterionId", "score", "feedback", "evidence");
+
+            return ObjectSchema(new Dictionary<string, object>
+            {
+                ["criterionResults"] = ArraySchema(criterionSchema),
+                ["summaryFeedback"] = StringSchema(),
+                ["strengths"] = ArraySchema(StringSchema()),
+                ["improvements"] = ArraySchema(StringSchema()),
+                ["studySuggestions"] = ArraySchema(StringSchema())
+            }, "criterionResults", "summaryFeedback", "strengths", "improvements", "studySuggestions");
         }
 
         /// <summary>Đọc retryDelay (giây) từ JSON error response của Gemini 429.</summary>
@@ -131,7 +228,7 @@ namespace LetsLearn.UseCases.Services.AiQuestionGeneration
             return 0;
         }
 
-        private async Task<string?> GenerateOpenAiCompatibleJsonAsync(string systemPrompt, string userPrompt, decimal temperature, string modelConfigKey, CancellationToken ct)
+        private async Task<string?> GenerateOpenAiCompatibleJsonAsync(string systemPrompt, string userPrompt, decimal temperature, string modelConfigKey, CancellationToken ct, TimeSpan? requestTimeout, string? modelOverride)
         {
             var apiKey = _configuration["AI:ApiKey"];
             if (string.IsNullOrWhiteSpace(apiKey))
@@ -141,10 +238,10 @@ namespace LetsLearn.UseCases.Services.AiQuestionGeneration
             }
 
             var baseUrl = _configuration["AI:BaseUrl"] ?? "https://api.openai.com/v1";
-            var model = _configuration[$"AI:{modelConfigKey}"] ?? _configuration["AI:GeneratorModel"] ?? "gpt-4o-mini";
+            var model = modelOverride ?? _configuration[$"AI:{modelConfigKey}"] ?? _configuration["AI:GeneratorModel"] ?? "gpt-4o-mini";
             _logger.LogInformation("[AI Questions] Calling OpenAI-compatible chat completions. Model={Model}, ModelConfigKey={ModelConfigKey}, Temperature={Temperature}", model, modelConfigKey, temperature);
 
-            using var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(3) };
+            using var httpClient = new HttpClient { Timeout = requestTimeout ?? TimeSpan.FromMinutes(3) };
             httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
             var payload = new
@@ -164,9 +261,8 @@ namespace LetsLearn.UseCases.Services.AiQuestionGeneration
 
             if (!response.IsSuccessStatusCode)
             {
-                var error = await response.Content.ReadAsStringAsync(ct);
-                _logger.LogError("[AI Questions] OpenAI-compatible generation failed. StatusCode={StatusCode}, Model={Model}, Error={Error}", (int)response.StatusCode, model, error);
-                throw new InvalidOperationException($"AI provider returned {(int)response.StatusCode}: {error}");
+                _logger.LogError("[AI Questions] OpenAI-compatible generation failed. StatusCode={StatusCode}, Model={Model}", (int)response.StatusCode, model);
+                throw new InvalidOperationException($"AI provider returned {(int)response.StatusCode}.");
             }
 
             var responseJson = await response.Content.ReadAsStringAsync(ct);

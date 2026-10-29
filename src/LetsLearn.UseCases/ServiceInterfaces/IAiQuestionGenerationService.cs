@@ -16,6 +16,53 @@ namespace LetsLearn.UseCases.ServiceInterfaces
     public interface IDocumentTextExtractor
     {
         Task<ExtractedDocument> ExtractAsync(IFormFile file, string savedPath, CancellationToken ct = default);
+        Task<ExtractedDocument> ExtractAsync(string fileName, string savedPath, CancellationToken ct = default);
+    }
+
+    public interface IAssignmentSubmissionExtractor
+    {
+        Task<AssignmentSubmissionSnapshot> ExtractAsync(
+            LetsLearn.Core.Entities.AssignmentResponse submission,
+            CancellationToken ct = default);
+    }
+
+    public interface IAssignmentGradingService
+    {
+        Task<LetsLearn.UseCases.DTOs.ValidatedAssignmentGrade> GradeAsync(
+            LetsLearn.UseCases.DTOs.AssignmentGradingInput input,
+            LetsLearn.Core.Entities.AssignmentRubric rubric,
+            CancellationToken ct = default);
+    }
+
+    public interface IAiAssignmentGradingJobQueue
+    {
+        ValueTask EnqueueAsync(Guid jobId, CancellationToken ct = default);
+        ValueTask<Guid> DequeueAsync(CancellationToken ct = default);
+    }
+
+    public interface IAiAssignmentGradingJobService
+    {
+        Task<LetsLearn.UseCases.DTOs.AiAssignmentGradingJobRequestResult> RequestAsync(
+            Guid assignmentResponseId,
+            Guid requesterId,
+            CancellationToken ct = default);
+    }
+
+    public interface IAiAssignmentGradingJobProcessor
+    {
+        Task ProcessAsync(Guid jobId, CancellationToken ct = default);
+    }
+
+    public interface IAiAssignmentGradingReviewService
+    {
+        Task<LetsLearn.UseCases.DTOs.AssignmentRubricResponse> UpsertRubricAsync(Guid topicId, LetsLearn.UseCases.DTOs.UpsertAssignmentRubricRequest request, Guid requesterId, string? requesterRole, CancellationToken ct = default);
+        Task<LetsLearn.UseCases.DTOs.AssignmentRubricResponse> GetRubricAsync(Guid topicId, Guid requesterId, string? requesterRole, CancellationToken ct = default);
+        Task<LetsLearn.UseCases.DTOs.AiAssignmentGradingJobRequestResult> RequestJobAsync(Guid responseId, Guid requesterId, string? requesterRole, CancellationToken ct = default);
+        Task<LetsLearn.UseCases.DTOs.AiAssignmentGradingJobResponse> GetJobAsync(Guid jobId, Guid requesterId, string? requesterRole, CancellationToken ct = default);
+        Task<LetsLearn.UseCases.DTOs.AssignmentGradingHistoryResponse> GetHistoryAsync(Guid responseId, int page, int pageSize, Guid requesterId, string? requesterRole, CancellationToken ct = default);
+        Task<LetsLearn.UseCases.DTOs.PublishedAssignmentGradeResponse> PublishDraftAsync(Guid draftId, LetsLearn.UseCases.DTOs.PublishAiAssignmentGradeRequest request, Guid requesterId, string? requesterRole, CancellationToken ct = default);
+        Task RejectDraftAsync(Guid draftId, LetsLearn.UseCases.DTOs.RejectAiAssignmentGradeRequest request, Guid requesterId, string? requesterRole, CancellationToken ct = default);
+        Task<LetsLearn.UseCases.DTOs.PublishedAssignmentGradeResponse> GetPublishedGradeAsync(Guid responseId, Guid requesterId, string? requesterRole, CancellationToken ct = default);
     }
 
     public interface IDocumentChunkingService
@@ -26,6 +73,14 @@ namespace LetsLearn.UseCases.ServiceInterfaces
     public interface IAiLlmClient
     {
         Task<string?> GenerateJsonAsync(string systemPrompt, string userPrompt, decimal temperature, CancellationToken ct = default, string modelConfigKey = "GeneratorModel");
+        Task<string?> GenerateJsonWithOptionsAsync(
+            string systemPrompt,
+            string userPrompt,
+            decimal temperature,
+            CancellationToken ct,
+            string modelConfigKey,
+            TimeSpan requestTimeout,
+            string modelOverride);
     }
 
     public interface IAiEmbeddingClient

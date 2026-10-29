@@ -10,8 +10,14 @@ namespace LetsLearn.Core.Shared
     {
         public const string Admin = "Admin";
         public const string Student = "Student";
+        // Some existing accounts/frontends use "Learner" for the same learner role.
+        public const string Learner = "Learner";
         public const string Teacher = "Teacher";
 
         public static readonly string[] All = new[] { Admin, Student , Teacher };
+
+        public static bool IsStudent(string? role) =>
+            string.Equals(role, Student, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, Learner, StringComparison.OrdinalIgnoreCase);
     }
 }
