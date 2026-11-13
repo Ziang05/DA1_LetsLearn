@@ -28,6 +28,7 @@ using Microsoft.IdentityModel.Tokens;
 using StackExchange.Redis;
 using System.Text;
 using LetsLearn.API.Hubs;
+using LetsLearn.API.Services;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -38,6 +39,9 @@ builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
 // SignalR — cho phép real-time messaging
 builder.Services.AddSignalR();
+builder.Services.AddScoped<QuizBattleService>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddHostedService<QuizBattleCompletionWorker>();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -242,5 +246,6 @@ app.MapControllers();
 
 // Map SignalR Hub — FE kết nối tới "/hubs/chat"
 app.MapHub<ChatHub>("/hubs/chat");
+app.MapHub<QuizBattleHub>("/hubs/quiz-battle");
 
 app.Run();

@@ -54,6 +54,9 @@ namespace LetsLearn.Infrastructure.Data
         public DbSet<AssignmentRubricCriterion> AssignmentRubricCriteria { get; set; }
         public DbSet<AiAssignmentGradingJob> AiAssignmentGradingJobs { get; set; }
         public DbSet<AiAssignmentGradeDraft> AiAssignmentGradeDrafts { get; set; }
+        public DbSet<QuizBattle> QuizBattles { get; set; }
+        public DbSet<QuizBattleParticipant> QuizBattleParticipants { get; set; }
+        public DbSet<QuizBattleAnswer> QuizBattleAnswers { get; set; }
         #endregion
 
         #region OnModelCreating
@@ -471,6 +474,35 @@ namespace LetsLearn.Infrastructure.Data
                 .HasOne<Topic>()
                 .WithMany()
                 .HasForeignKey(log => log.TopicId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<QuizBattle>()
+                .HasIndex(battle => battle.JoinCode).IsUnique();
+            modelBuilder.Entity<QuizBattle>()
+                .HasIndex(battle => new { battle.Status, battle.CreatedAt });
+            modelBuilder.Entity<QuizBattle>()
+                .HasOne<User>().WithMany()
+                .HasForeignKey(battle => battle.HostId)
+                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<QuizBattle>()
+                .HasMany(battle => battle.Participants).WithOne()
+                .HasForeignKey(participant => participant.BattleId)
+                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<QuizBattle>()
+                .HasMany(battle => battle.Answers).WithOne()
+                .HasForeignKey(answer => answer.BattleId)
+                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<QuizBattleParticipant>()
+                .HasIndex(participant => new { participant.BattleId, participant.UserId }).IsUnique();
+            modelBuilder.Entity<QuizBattleParticipant>()
+                .HasOne<User>().WithMany()
+                .HasForeignKey(participant => participant.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<QuizBattleAnswer>()
+                .HasIndex(answer => new { answer.BattleId, answer.UserId, answer.QuestionIndex }).IsUnique();
+            modelBuilder.Entity<QuizBattleAnswer>()
+                .HasOne<User>().WithMany()
+                .HasForeignKey(answer => answer.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         }
 
