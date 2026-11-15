@@ -27,6 +27,10 @@ public sealed class QuizBattleController(QuizBattleService service) : Controller
     public async Task<IActionResult> End(Guid id, CancellationToken ct) =>
         await Execute(() => service.EndEarlyAsync(id, UserId(), ct));
 
+    [HttpPost("{id:guid}/rematch")]
+    public async Task<IActionResult> Rematch(Guid id, CancellationToken ct) =>
+        await Execute(() => service.RematchAsync(id, UserId(), ct));
+
     [HttpDelete("{id:guid}/leave")]
     public async Task<IActionResult> Leave(Guid id, CancellationToken ct) =>
         await Execute(() => service.LeaveAsync(id, UserId(), ct));
@@ -45,8 +49,8 @@ public sealed class QuizBattleController(QuizBattleService service) : Controller
 
     [HttpGet("/leaderboard")]
     [HttpGet("/api/leaderboard")]
-    public async Task<IActionResult> Leaderboard([FromQuery] string period = "all", CancellationToken ct = default) =>
-        await Execute(() => service.LeaderboardAsync(period, ct));
+    public async Task<IActionResult> Leaderboard([FromQuery] string period = "all", [FromQuery] string? courseId = null, CancellationToken ct = default) =>
+        await Execute(() => service.LeaderboardAsync(period, courseId, UserId(), ct));
 
     private Guid UserId()
     {

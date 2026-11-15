@@ -6,10 +6,12 @@ public class QuizBattle
     public string JoinCode { get; set; } = string.Empty;
     public Guid HostId { get; set; }
     public string CourseId { get; set; } = string.Empty;
+    public string Difficulty { get; set; } = "mixed";
     public string Status { get; set; } = "waiting";
     public int QuestionCount { get; set; }
     public int SecondsPerQuestion { get; set; }
     public string QuestionsJson { get; set; } = "[]";
+    public Guid? RematchOfBattleId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }

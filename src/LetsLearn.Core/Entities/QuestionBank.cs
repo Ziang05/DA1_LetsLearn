@@ -16,6 +16,7 @@ namespace LetsLearn.Core.Entities
         public string? QuestionText { get; set; }
         public string? Status { get; set; }
         public string? Type { get; set; }
+        public string Difficulty { get; set; } = "medium";
         public decimal? DefaultMark { get; set; }
         public long? Usage { get; set; }
         public string? FeedbackOfTrue { get; set; }

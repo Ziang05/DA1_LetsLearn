@@ -481,6 +481,13 @@ namespace LetsLearn.Infrastructure.Data
             modelBuilder.Entity<QuizBattle>()
                 .HasIndex(battle => new { battle.Status, battle.CreatedAt });
             modelBuilder.Entity<QuizBattle>()
+                .HasIndex(battle => battle.RematchOfBattleId).IsUnique()
+                .HasFilter("\"RematchOfBattleId\" IS NOT NULL");
+            modelBuilder.Entity<QuizBattle>().Property(battle => battle.Difficulty)
+                .HasMaxLength(20).HasDefaultValue("mixed");
+            modelBuilder.Entity<Question>().Property(question => question.Difficulty)
+                .HasMaxLength(20).HasDefaultValue("medium");
+            modelBuilder.Entity<QuizBattle>()
                 .HasOne<User>().WithMany()
                 .HasForeignKey(battle => battle.HostId)
                 .OnDelete(DeleteBehavior.Cascade);

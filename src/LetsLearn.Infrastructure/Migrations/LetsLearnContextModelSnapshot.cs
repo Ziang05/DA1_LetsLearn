@@ -27,10 +27,12 @@ namespace LetsLearn.Infrastructure.Migrations
                     b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
                     b.Property<DateTime>("CreatedAt").HasColumnType("timestamp with time zone");
                     b.Property<string>("CourseId").IsRequired().HasColumnType("text");
+                    b.Property<string>("Difficulty").IsRequired().ValueGeneratedOnAdd().HasMaxLength(20).HasColumnType("character varying(20)").HasDefaultValue("mixed");
                     b.Property<Guid>("HostId").HasColumnType("uuid");
                     b.Property<DateTime?>("CompletedAt").HasColumnType("timestamp with time zone");
                     b.Property<string>("JoinCode").IsRequired().HasColumnType("text");
                     b.Property<string>("QuestionsJson").IsRequired().HasColumnType("text");
+                    b.Property<Guid?>("RematchOfBattleId").HasColumnType("uuid");
                     b.Property<int>("QuestionCount").HasColumnType("integer");
                     b.Property<int>("SecondsPerQuestion").HasColumnType("integer");
                     b.Property<DateTime?>("StartedAt").HasColumnType("timestamp with time zone");
@@ -38,6 +40,7 @@ namespace LetsLearn.Infrastructure.Migrations
                     b.HasKey("Id");
                     b.HasIndex("HostId");
                     b.HasIndex("JoinCode").IsUnique();
+                    b.HasIndex("RematchOfBattleId").IsUnique().HasFilter("\"RematchOfBattleId\" IS NOT NULL");
                     b.HasIndex("Status", "CreatedAt");
                     b.ToTable("QuizBattles");
                 });
@@ -968,6 +971,13 @@ namespace LetsLearn.Infrastructure.Migrations
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Difficulty")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("medium");
 
                     b.Property<string>("FeedbackOfFalse")
                         .HasColumnType("text");

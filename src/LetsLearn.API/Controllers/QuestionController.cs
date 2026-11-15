@@ -244,6 +244,38 @@ namespace LetsLearn.WebApi.Controllers
             return Guid.TryParse(idStr, out var id) ? id : Guid.Empty;
         }
 
+        [HttpPatch("{questionId:guid}/difficulty")]
+        public async Task<ActionResult<GetQuestionResponse>> UpdateDifficulty(
+            Guid questionId,
+            [FromBody] UpdateQuestionDifficultyRequest request,
+            CancellationToken ct)
+        {
+            var difficulty = request?.Difficulty?.Trim().ToLowerInvariant();
+            if (difficulty is not ("easy" or "medium" or "hard"))
+                return BadRequest(new { message = "Difficulty must be easy, medium, or hard." });
+
+            try
+            {
+                var question = await _db.Questions.SingleOrDefaultAsync(q => q.Id == questionId && q.DeletedAt == null, ct)
+                    ?? throw new KeyNotFoundException("Question not found.");
+                var userId = UserId();
+                await RequireCourseOwner(question.CourseId, userId, ct);
+                question.Difficulty = difficulty;
+                question.ModifiedById = userId;
+                question.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync(ct);
+                return Ok(await _service.GetByIdAsync(questionId, ct));
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { message = "Question not found." });
+            }
+        }
+
         private Guid UserId()
         {
             var value = User.FindFirstValue("userID");
