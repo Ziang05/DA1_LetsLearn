@@ -43,6 +43,7 @@ namespace LetsLearn.UseCases.Services.QuestionSer
                 QuestionText = req.QuestionText,
                 Status = req.Status,
                 Type = req.Type,
+                Difficulty = NormalizeDifficulty(req.Difficulty),
                 DefaultMark = (decimal?)req.DefaultMark,
                 Usage = req.Usage,
                 FeedbackOfTrue = req.FeedbackOfTrue,
@@ -125,6 +126,7 @@ namespace LetsLearn.UseCases.Services.QuestionSer
             question.QuestionText = req.QuestionText;
             question.Status = req.Status;
             question.Type = req.Type;
+            if (!string.IsNullOrWhiteSpace(req.Difficulty)) question.Difficulty = NormalizeDifficulty(req.Difficulty);
             question.DefaultMark = (decimal?)req.DefaultMark;
             question.Usage = req.Usage;
             question.FeedbackOfTrue = req.FeedbackOfTrue;
@@ -254,6 +256,7 @@ namespace LetsLearn.UseCases.Services.QuestionSer
                 QuestionText = q.QuestionText,
                 Status = q.Status,
                 Type = q.Type,
+                Difficulty = q.Difficulty,
                 DefaultMark = (double?)q.DefaultMark,
                 Usage = q.Usage,
                 FeedbackOfTrue = q.FeedbackOfTrue,
@@ -274,6 +277,14 @@ namespace LetsLearn.UseCases.Services.QuestionSer
                 }).ToList()
             };
         }
+
+        private static string NormalizeDifficulty(string? difficulty) => difficulty?.Trim().ToLowerInvariant() switch
+        {
+            null or "" or "medium" => "medium",
+            "easy" => "easy",
+            "hard" => "hard",
+            _ => throw new ArgumentException("Difficulty must be easy, medium, or hard.")
+        };
 
         // Test Case Estimation:
         // Decision points (D):
@@ -314,6 +325,7 @@ namespace LetsLearn.UseCases.Services.QuestionSer
                         QuestionName = req.QuestionName,
                         QuestionText = req.QuestionText,
                         Type = req.Type,
+                        Difficulty = NormalizeDifficulty(req.Difficulty),
                         CourseId = req.CourseId ?? string.Empty,
                         CreatedById = userId,
                         CreatedAt = DateTime.UtcNow,

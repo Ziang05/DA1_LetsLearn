@@ -7,6 +7,11 @@ using System.Threading.Tasks;
 
 namespace LetsLearn.UseCases.DTOs
 {
+    public class UpdateQuestionDifficultyRequest
+    {
+        public string Difficulty { get; set; } = string.Empty;
+    }
+
     public class CreateQuestionChoiceRequest
     {
         public string? Text { get; set; }
@@ -42,6 +47,7 @@ namespace LetsLearn.UseCases.DTOs
         public string? QuestionText { get; set; }
         public string? Status { get; set; }
         public string? Type { get; set; }
+        public string? Difficulty { get; set; }
         public double? DefaultMark { get; set; }
         public long? Usage { get; set; }
         public string? FeedbackOfTrue { get; set; }
@@ -60,6 +66,7 @@ namespace LetsLearn.UseCases.DTOs
         public string? QuestionText { get; set; }
         public string? Status { get; set; }
         public string? Type { get; set; }
+        public string? Difficulty { get; set; }
         public double? DefaultMark { get; set; }
         public long? Usage { get; set; }
         public string? FeedbackOfTrue { get; set; }
@@ -83,6 +90,7 @@ namespace LetsLearn.UseCases.DTOs
         public string? QuestionText { get; set; }
         public string? Status { get; set; }
         public string? Type { get; set; }
+        public string Difficulty { get; set; } = "medium";
         public double? DefaultMark { get; set; }
         public long? Usage { get; set; }
         public string? FeedbackOfTrue { get; set; }

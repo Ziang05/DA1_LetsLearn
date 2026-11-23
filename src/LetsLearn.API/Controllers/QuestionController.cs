@@ -8,6 +8,8 @@ using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
+using LetsLearn.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace LetsLearn.WebApi.Controllers
 {
@@ -19,10 +21,13 @@ namespace LetsLearn.WebApi.Controllers
         private readonly IQuestionService _service;
         private readonly ILogger<QuestionController> _logger;
 
-        public QuestionController(IQuestionService service, ILogger<QuestionController> logger)
+        private readonly LetsLearnContext _db;
+
+        public QuestionController(IQuestionService service, ILogger<QuestionController> logger, LetsLearnContext db)
         {
             _service = service;
             _logger = logger;
+            _db = db;
         }
 
         // POST: question
@@ -42,8 +47,14 @@ namespace LetsLearn.WebApi.Controllers
 
             try
             {
+                var courseId = request.CourseId ?? request.Course?.Id;
+                await RequireCourseOwner(courseId, userId, ct);
                 var created = await _service.CreateAsync(request, userId, ct);
                 return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -52,7 +63,6 @@ namespace LetsLearn.WebApi.Controllers
         }
         // GET: question?courseId=CS01
         [HttpGet]
-        [AllowAnonymous]
         public async Task<ActionResult<List<GetQuestionResponse>>> GetQuestions(
             [FromQuery] string? courseId = null,
             CancellationToken ct = default)
@@ -62,8 +72,13 @@ namespace LetsLearn.WebApi.Controllers
 
             try
             {
+                await RequireCourseOwner(courseId, UserId(), ct);
                 var list = await _service.GetByCourseIdAsync(courseId, ct);
                 return Ok(list);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -72,13 +87,19 @@ namespace LetsLearn.WebApi.Controllers
         }
         // GET: api/question/{id}
         [HttpGet("{id:guid}")]
-        [AllowAnonymous]
         public async Task<ActionResult<GetQuestionResponse>> GetById(Guid id, CancellationToken ct)
         {
             try
             {
+                var question = await _db.Questions.AsNoTracking().SingleOrDefaultAsync(q => q.Id == id && q.DeletedAt == null, ct)
+                    ?? throw new KeyNotFoundException("Question not found.");
+                await RequireCourseOwner(question.CourseId, UserId(), ct);
                 var data = await _service.GetByIdAsync(id, ct);
                 return Ok(data);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
             }
             catch (KeyNotFoundException)
             {
@@ -92,13 +113,17 @@ namespace LetsLearn.WebApi.Controllers
 
         // GET: api/question/{courseId}
         [HttpGet("{courseId}")]
-        [AllowAnonymous]
         public async Task<ActionResult<List<GetQuestionResponse>>> GetByCourse(String courseId, CancellationToken ct)
         {
             try
             {
+                await RequireCourseOwner(courseId, UserId(), ct);
                 var list = await _service.GetByCourseIdAsync(courseId, ct);
                 return Ok(list);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -127,6 +152,10 @@ namespace LetsLearn.WebApi.Controllers
 
             try
             {
+                var existing = await _db.Questions.AsNoTracking().SingleOrDefaultAsync(q => q.Id == questionId && q.DeletedAt == null, ct)
+                    ?? throw new KeyNotFoundException("Question not found.");
+                await RequireCourseOwner(existing.CourseId, userId, ct);
+                request.CourseId = existing.CourseId;
                 var updated = await _service.UpdateAsync(request, userId, ct);
                 _logger.LogInformation("Question {QuestionId} updated successfully", updated.Id);
                 return Ok(updated);
@@ -135,6 +164,10 @@ namespace LetsLearn.WebApi.Controllers
             {
                 _logger.LogWarning("Question {QuestionId} not found for update", questionId);
                 return NotFound(new { message = "Question not found." });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -145,16 +178,19 @@ namespace LetsLearn.WebApi.Controllers
 
         // POST: api/question/bulk-import
         [HttpPost("bulk-import")]
-        [AllowAnonymous]
         public async Task<ActionResult> BulkImport(IFormFile file, [FromQuery] string courseId, CancellationToken ct)
         {
-            var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "userID")?.Value;
-            Guid userId = string.IsNullOrEmpty(userIdClaim) ? Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6") : Guid.Parse(userIdClaim);
+            var userId = UserId();
 
             try
             {
+                await RequireCourseOwner(courseId, userId, ct);
                 var resultCount = await _service.ImportBulkQuestionsAsync(file, courseId, userId, ct);
                 return Ok(new { message = $"Import {resultCount} questions successfully!" });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -168,6 +204,9 @@ namespace LetsLearn.WebApi.Controllers
         {
             try
             {
+                var question = await _db.Questions.AsNoTracking().SingleOrDefaultAsync(q => q.Id == id && q.DeletedAt == null, ct)
+                    ?? throw new KeyNotFoundException("Question not found.");
+                await RequireCourseOwner(question.CourseId, UserId(), ct);
                 _logger.LogInformation("Deleting question {QuestionId}", id);
                 var result = await _service.DeleteAsync(id, ct);
                 if (!result)
@@ -178,6 +217,14 @@ namespace LetsLearn.WebApi.Controllers
 
                 _logger.LogInformation("Question {QuestionId} deleted successfully", id);
                 return Ok(new { message = "Question deleted successfully." });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { message = "Question not found." });
             }
             catch (InvalidOperationException ex)
             {
@@ -195,6 +242,54 @@ namespace LetsLearn.WebApi.Controllers
         {
             var idStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
             return Guid.TryParse(idStr, out var id) ? id : Guid.Empty;
+        }
+
+        [HttpPatch("{questionId:guid}/difficulty")]
+        public async Task<ActionResult<GetQuestionResponse>> UpdateDifficulty(
+            Guid questionId,
+            [FromBody] UpdateQuestionDifficultyRequest request,
+            CancellationToken ct)
+        {
+            var difficulty = request?.Difficulty?.Trim().ToLowerInvariant();
+            if (difficulty is not ("easy" or "medium" or "hard"))
+                return BadRequest(new { message = "Difficulty must be easy, medium, or hard." });
+
+            try
+            {
+                var question = await _db.Questions.SingleOrDefaultAsync(q => q.Id == questionId && q.DeletedAt == null, ct)
+                    ?? throw new KeyNotFoundException("Question not found.");
+                var userId = UserId();
+                await RequireCourseOwner(question.CourseId, userId, ct);
+                question.Difficulty = difficulty;
+                question.ModifiedById = userId;
+                question.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync(ct);
+                return Ok(await _service.GetByIdAsync(questionId, ct));
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { message = "Question not found." });
+            }
+        }
+
+        private Guid UserId()
+        {
+            var value = User.FindFirstValue("userID");
+            return Guid.TryParse(value, out var id) && id != Guid.Empty
+                ? id : throw new UnauthorizedAccessException("Sign in to manage questions.");
+        }
+
+        private async Task RequireCourseOwner(string? courseId, Guid userId, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(courseId)) throw new ArgumentException("CourseId is required.");
+            var ownerId = await _db.Courses.AsNoTracking().Where(c => c.Id == courseId)
+                .Select(c => (Guid?)c.CreatorId).SingleOrDefaultAsync(ct)
+                ?? throw new KeyNotFoundException("Course not found.");
+            if (ownerId != userId) throw new UnauthorizedAccessException("Only the course teacher can manage its questions.");
         }
     }
 }
