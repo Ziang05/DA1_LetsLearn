@@ -9,19 +9,20 @@ using Npgsql;
 
 namespace LetsLearn.API.Services;
 
-public sealed record BattleCreateRequest(string CourseId, int QuestionCount = 10, int DurationMinutes = 10, string Difficulty = "mixed");
+public sealed record BattleCreateRequest(string CourseId, int QuestionCount = 10, int SecondsPerQuestion = 30, string Difficulty = "mixed", IReadOnlyList<Guid>? QuestionIds = null);
 public sealed record BattleChoiceDto(Guid Id, string Text);
 public sealed record BattleQuestionDto(int Index, string Text, IReadOnlyList<BattleChoiceDto> Choices);
 public sealed record BattleReviewDto(int QuestionIndex, string Question, string Difficulty, string? YourAnswer, string CorrectAnswer,
     bool? IsCorrect, string? Explanation);
-public sealed record BattlePlayerDto(Guid UserId, string Username, string? Avatar, int Score, int AnsweredCount, bool IsHost);
-public sealed record BattleAnswerRequest(int QuestionIndex, Guid? ChoiceId);
+public sealed record BattlePlayerDto(Guid UserId, string Username, string? Avatar, int Score, int AnsweredCount, int Streak, bool RocketUsed, bool IsHost);
+public sealed record BattleAnswerRequest(int QuestionIndex, Guid? ChoiceId, bool UseRocket = false);
 public sealed record BattleAnswerDto(int QuestionIndex, Guid? ChoiceId, bool Correct, int Points, int Score);
 public sealed record BattleResultDto(Guid UserId, string Username, string? Avatar, int Score, int CorrectCount, long TotalAnswerMilliseconds, int Rank);
 public sealed record LeaderboardRowDto(Guid UserId, string Username, string? Avatar, long Points, int Rank);
-public sealed record BattleStateDto(Guid Id, string JoinCode, string Status, int QuestionCount, int DurationSeconds,
+public sealed record BattleStateDto(Guid Id, Guid HostId, string JoinCode, string Status, int QuestionCount, int DurationSeconds,
     string Difficulty, DateTime CreatedAt, DateTime? StartedAt, DateTime? CompletedAt, DateTime ServerNow, int CurrentQuestionIndex,
-    DateTime? Deadline, DateTime? JoinEndsAt, bool Finished, IReadOnlyList<BattleQuestionDto> Questions,
+    DateTime? Deadline, bool Finished, int AnswersThisQuestion, bool AnsweredCurrentQuestion, Guid? MyAnswerChoiceId,
+    IReadOnlyList<BattleQuestionDto> Questions,
     IReadOnlyList<BattlePlayerDto> Players, IReadOnlyList<BattleResultDto>? Results,
     IReadOnlyList<BattleReviewDto>? Review, Guid? RematchBattleId);
 
@@ -30,18 +31,15 @@ public sealed class QuizBattleService(LetsLearnContext db, IHubContext<QuizBattl
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private DateTime Now => clock.GetUtcNow().UtcDateTime;
-    private const int JoinWindowSeconds = 5 * 60;
-    // SecondsPerQuestion is retained as the database column name for migration compatibility;
-    // new battles store the total battle duration in this column.
-    private static DateTime EndAt(QuizBattle b) => b.StartedAt!.Value.AddSeconds(b.SecondsPerQuestion);
-    private static DateTime JoinEndsAt(QuizBattle b) => b.StartedAt!.Value.AddSeconds(JoinWindowSeconds);
+    // The existing column stores each question's timer for migration compatibility.
     private static string Room(Guid id) => $"quiz-battle:{id:N}";
 
     public async Task<BattleStateDto> CreateAsync(Guid userId, BattleCreateRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.CourseId)) throw new ArgumentException("CourseId is required.");
-        if (request.QuestionCount is < 3 or > 20) throw new ArgumentException("QuestionCount must be between 3 and 20.");
-        if (request.DurationMinutes is < 5 or > 60) throw new ArgumentException("DurationMinutes must be between 5 and 60.");
+        if (request.SecondsPerQuestion is < 5 or > 300) throw new ArgumentException("SecondsPerQuestion must be between 5 and 300.");
+        if (request.QuestionIds is not { Count: > 0 } && request.QuestionCount is < 1 or > 100)
+            throw new ArgumentException("Choose between 1 and 100 questions.");
         var difficulty = NormalizeBattleDifficulty(request.Difficulty);
         await EnsureCourseOwnerAsync(request.CourseId, userId, ct);
         var questions = await db.Questions.AsNoTracking().Include(q => q.Choices)
@@ -51,13 +49,18 @@ public sealed class QuizBattleService(LetsLearnContext db, IHubContext<QuizBattl
             && !string.IsNullOrWhiteSpace(q.QuestionText ?? q.QuestionName)
             && q.Choices.Count >= 2 && q.Choices.All(c => !string.IsNullOrWhiteSpace(c.Text))
             && q.Choices.Count(c => c.GradePercent == 100) == 1 && q.Choices.Count(c => c.GradePercent > 0) == 1).ToList();
-        var selectedQuestions = SelectQuestions(usable, request.QuestionCount, difficulty);
-        if (selectedQuestions.Count < request.QuestionCount)
+        var usableById = usable.ToDictionary(q => q.Id);
+        var selectedQuestions = request.QuestionIds is { Count: > 0 }
+            ? request.QuestionIds.Distinct().Where(usableById.ContainsKey).Select(id => usableById[id]).ToList()
+            : SelectQuestions(usable, request.QuestionCount, difficulty);
+        var questionCount = request.QuestionIds is { Count: > 0 } ? request.QuestionIds.Distinct().Count() : request.QuestionCount;
+        if (questionCount is < 1 or > 100) throw new ArgumentException("Choose between 1 and 100 questions.");
+        if (selectedQuestions.Count != questionCount)
         {
             var available = difficulty == "mixed" ? usable.Count : usable.Count(q => NormalizeQuestionDifficulty(q.Difficulty) == difficulty);
             throw new InvalidOperationException(difficulty == "mixed"
-                ? $"This course has {available} usable single-answer questions across all difficulties; {request.QuestionCount} are required."
-                : $"This course has {available} usable {difficulty} single-answer questions; {request.QuestionCount} are required.");
+                ? $"This course has {available} usable single-answer questions across all difficulties; {questionCount} are required."
+                : $"This course has {available} usable {difficulty} single-answer questions; {questionCount} are required.");
         }
         var snapshots = selectedQuestions
             .Select(q => new QuestionSnapshot(q.QuestionText ?? q.QuestionName!, q.Choices
@@ -67,9 +70,9 @@ public sealed class QuizBattleService(LetsLearnContext db, IHubContext<QuizBattl
         {
             Id = Guid.NewGuid(), HostId = userId, CourseId = request.CourseId,
             Difficulty = difficulty,
-            QuestionCount = request.QuestionCount, SecondsPerQuestion = request.DurationMinutes * 60,
+            QuestionCount = questionCount, SecondsPerQuestion = request.SecondsPerQuestion,
             QuestionsJson = JsonSerializer.Serialize(snapshots, JsonOptions), CreatedAt = Now,
-            Participants = new List<QuizBattleParticipant> { new() { Id = Guid.NewGuid(), UserId = userId, JoinedAt = Now } }
+            Participants = new List<QuizBattleParticipant>()
         };
         db.QuizBattles.Add(battle);
         for (var attempt = 0; attempt < 5; attempt++)
@@ -93,9 +96,7 @@ public sealed class QuizBattleService(LetsLearnContext db, IHubContext<QuizBattl
         {
             if (battle.Participants.Any(p => p.UserId == userId)) return true;
             if (battle.Status == "completed") throw new InvalidOperationException("This battle has ended.");
-            if (battle.Status == "active" && (!battle.StartedAt.HasValue || Now >= JoinEndsAt(battle)))
-                throw new InvalidOperationException("Joining closed five minutes after the battle started.");
-            if (battle.Participants.Count >= 8) throw new InvalidOperationException("This battle is full (8 players maximum).");
+            if (battle.Status == "active") throw new InvalidOperationException("This battle has already started.");
             await EnsureCourseAccessAsync(battle.CourseId, userId, ct);
             // Explicitly mark the new participant Added. Discovering a preassigned generated
             // GUID through an existing battle's navigation can mark it Modified instead.
@@ -116,13 +117,31 @@ public sealed class QuizBattleService(LetsLearnContext db, IHubContext<QuizBattl
             if (battle.HostId != userId) throw new UnauthorizedAccessException("Only the host can start the battle.");
             // Retrying a successful start must never reset the clock.
             if (battle.Status != "waiting") return Task.FromResult(false);
-            if (battle.Participants.Count < 2) throw new InvalidOperationException("At least two players are required.");
+            if (battle.Participants.Count < 1) throw new InvalidOperationException("At least one player must join before the battle starts.");
             battle.Status = "active";
             battle.StartedAt = Now.AddSeconds(3);
+            battle.CurrentQuestionIndex = 0;
+            battle.QuestionStartedAt = battle.StartedAt;
             return Task.FromResult(true);
         }, ct);
         await PublishAsync(battleId, "BattleStarted");
         return await GetAsync(battleId, userId, ct);
+    }
+
+    public async Task<BattleStateDto> AdvanceAsync(Guid battleId, Guid userId, CancellationToken ct)
+    {
+        await WithBattleLockAsync(battleId, async battle =>
+        {
+            if (battle.HostId != userId) throw new UnauthorizedAccessException("Only the host can advance questions.");
+            if (battle.Status != "active") throw new InvalidOperationException("The battle is not active.");
+            if (!battle.QuestionStartedAt.HasValue || Now < battle.QuestionStartedAt.Value) throw new InvalidOperationException("The question has not started yet.");
+            await ResetMissedStreaksAsync(battle, ct);
+            AdvanceQuestion(battle, Now);
+            return true;
+        }, ct);
+        var state = await GetAsync(battleId, userId, ct);
+        await PublishAsync(battleId, state.Status == "completed" ? "BattleCompleted" : "BattleQuestionChanged");
+        return state;
     }
 
     public async Task<BattleStateDto> EndEarlyAsync(Guid battleId, Guid userId, CancellationToken ct)
@@ -197,55 +216,70 @@ public sealed class QuizBattleService(LetsLearnContext db, IHubContext<QuizBattl
     {
         var closed = await WithBattleLockAsync(battleId, battle =>
         {
-            var participant = RequireParticipant(battle, userId);
             if (battle.Status != "waiting") throw new InvalidOperationException("Players cannot leave after a battle has started.");
             if (battle.HostId == userId) db.QuizBattles.Remove(battle);
-            else db.QuizBattleParticipants.Remove(participant);
+            else db.QuizBattleParticipants.Remove(RequireParticipant(battle, userId));
             return Task.FromResult(battle.HostId == userId);
         }, ct);
         await PublishAsync(battleId, closed ? "RoomClosed" : "PlayerLeft");
         return new { closed };
     }
 
-    public Task<BattleStateDto> GetAsync(Guid battleId, Guid userId, CancellationToken ct) =>
-        WithBattleLockAsync(battleId, async battle =>
+    public async Task<BattleStateDto> GetAsync(Guid battleId, Guid userId, CancellationToken ct)
+    {
+        var advanced = false;
+        var state = await WithBattleLockAsync(battleId, async battle =>
         {
-            RequireParticipant(battle, userId);
+            if (battle.HostId != userId) RequireParticipant(battle, userId);
             var now = Now;
-            await CompleteIfReadyAsync(battle, now, ct);
+            advanced = await CompleteIfReadyAsync(battle, now, ct);
             var users = await UsersAsync(battle, ct);
-            var answers = await db.QuizBattleAnswers.AsNoTracking().Where(a => a.BattleId == battleId).ToListAsync(ct);
+            var finished = battle.Status == "completed";
+            var index = battle.Status == "active" && now >= battle.StartedAt!.Value && battle.CurrentQuestionIndex < battle.QuestionCount ? battle.CurrentQuestionIndex : -1;
+            var answerCounts = await db.QuizBattleAnswers.AsNoTracking().Where(a => a.BattleId == battleId)
+                .GroupBy(a => a.UserId).Select(g => new { UserId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(g => g.UserId, g => g.Count, ct);
+            var answersThisQuestion = await db.QuizBattleAnswers.AsNoTracking()
+                .CountAsync(a => a.BattleId == battleId && a.QuestionIndex == battle.CurrentQuestionIndex, ct);
+            var currentAnswer = index >= 0
+                ? await db.QuizBattleAnswers.AsNoTracking().SingleOrDefaultAsync(a => a.BattleId == battleId
+                    && a.UserId == userId && a.QuestionIndex == index, ct)
+                : null;
+            var answers = finished
+                ? await db.QuizBattleAnswers.AsNoTracking().Where(a => a.BattleId == battleId).ToListAsync(ct)
+                : new List<QuizBattleAnswer>();
             var myAnswers = answers.Where(a => a.UserId == userId).OrderBy(a => a.QuestionIndex).ToList();
-            var finished = myAnswers.Count >= battle.QuestionCount;
-            var index = battle.Status == "active" && now >= battle.StartedAt!.Value && !finished
-                ? myAnswers.Count : -1;
             IReadOnlyList<BattleQuestionDto> questions = Array.Empty<BattleQuestionDto>();
             if (index >= 0)
             {
                 var question = Snapshots(battle)[index];
                 questions = new[] { new BattleQuestionDto(index, question.Text, question.Choices.Select(c => new BattleChoiceDto(c.Id, c.Text)).ToList()) };
             }
-            var players = battle.Participants.OrderBy(p => p.JoinedAt).ThenBy(p => p.UserId).Select(p =>
+            var players = battle.Participants.OrderByDescending(p => p.Score).ThenBy(p => p.JoinedAt).ThenBy(p => p.UserId).Select(p =>
                 new BattlePlayerDto(p.UserId, users[p.UserId].Username, users[p.UserId].Avatar, p.Score,
-                    answers.Count(a => a.UserId == p.UserId), p.UserId == battle.HostId)).ToList();
-            var review = battle.Status == "completed" ? BuildReview(battle, myAnswers) : null;
+                    answerCounts.GetValueOrDefault(p.UserId), p.Streak, p.RocketUsed, false)).ToList();
+            var review = battle.Status == "completed" && battle.HostId != userId ? BuildReview(battle, myAnswers) : null;
             var rematchBattleId = battle.Status == "completed"
                 ? await db.QuizBattles.AsNoTracking().Where(b => b.RematchOfBattleId == battle.Id)
                     .Select(b => (Guid?)b.Id).SingleOrDefaultAsync(ct)
                 : null;
-            return new BattleStateDto(battle.Id, battle.JoinCode, battle.Status, battle.QuestionCount, battle.SecondsPerQuestion,
+            return new BattleStateDto(battle.Id, battle.HostId, battle.JoinCode, battle.Status, battle.QuestionCount, battle.SecondsPerQuestion,
                 battle.Difficulty,
                 battle.CreatedAt, battle.StartedAt, battle.CompletedAt, now, index,
-                battle.StartedAt.HasValue ? EndAt(battle) : null,
-                battle.StartedAt.HasValue ? JoinEndsAt(battle) : null, finished,
+                battle.Status == "active" && battle.QuestionStartedAt.HasValue ? battle.QuestionStartedAt.Value.AddSeconds(battle.SecondsPerQuestion) : null,
+                finished,
+                answersThisQuestion,
+                currentAnswer != null, currentAnswer?.ChoiceId,
                 questions, players,
                 battle.Status == "completed" ? RankResults(battle, users, answers) : null,
                 review, rematchBattleId);
         }, ct);
+        if (advanced) await PublishAsync(battleId, state.Status == "completed" ? "BattleCompleted" : "BattleQuestionChanged");
+        return state;
+    }
 
     public async Task<BattleAnswerDto> AnswerAsync(Guid battleId, Guid userId, BattleAnswerRequest request, CancellationToken ct)
     {
-        var battleCompleted = false;
         var receipt = await WithBattleLockAsync(battleId, async battle =>
         {
             var participant = RequireParticipant(battle, userId);
@@ -259,11 +293,14 @@ public sealed class QuizBattleService(LetsLearnContext db, IHubContext<QuizBattl
             var now = Now;
             if (battle.Status != "active" || !battle.StartedAt.HasValue || now < battle.StartedAt.Value)
                 throw new InvalidOperationException("Battle is not active yet.");
-            if (now >= EndAt(battle)) throw new InvalidOperationException("The battle time has ended.");
-            var elapsedMs = (long)(now - battle.StartedAt.Value).TotalMilliseconds;
-            var index = await db.QuizBattleAnswers.CountAsync(a => a.BattleId == battleId && a.UserId == userId, ct);
+            var index = battle.CurrentQuestionIndex;
             if (index >= battle.QuestionCount) throw new InvalidOperationException("You have completed all questions.");
             if (request.QuestionIndex != index) throw new InvalidOperationException("That question is not currently active.");
+            if (!battle.QuestionStartedAt.HasValue || now >= battle.QuestionStartedAt.Value.AddSeconds(battle.SecondsPerQuestion)) throw new InvalidOperationException("Time for this question has ended.");
+            if (request.UseRocket && participant.RocketUsed) throw new InvalidOperationException("Your rocket boost has already been used.");
+            if (await db.QuizBattleAnswers.AnyAsync(a => a.BattleId == battleId && a.UserId == userId && a.QuestionIndex == index, ct))
+                throw new InvalidOperationException("Your answer is already locked.");
+            var elapsedMs = (long)(now - battle.QuestionStartedAt.Value).TotalMilliseconds;
             var choice = Snapshots(battle)[index].Choices.FirstOrDefault(c => c.Id == request.ChoiceId)
                 ?? throw new ArgumentException("Select a choice belonging to this question.");
             var answer = new QuizBattleAnswer
@@ -273,19 +310,16 @@ public sealed class QuizBattleService(LetsLearnContext db, IHubContext<QuizBattl
                 AnswerMilliseconds = elapsedMs, SubmittedAt = now
             };
             db.QuizBattleAnswers.Add(answer);
-            participant.Score += Points(battle, answer);
-            if (index + 1 == battle.QuestionCount) participant.TotalAnswerMilliseconds = elapsedMs;
-
-            var acceptedAnswers = await db.QuizBattleAnswers.CountAsync(a => a.BattleId == battleId, ct) + 1;
-            if (now >= JoinEndsAt(battle) && acceptedAnswers >= battle.Participants.Count * battle.QuestionCount)
-            {
-                battle.Status = "completed";
-                battle.CompletedAt = now;
-                battleCompleted = true;
-            }
-            return Receipt(battle, answer, participant.Score);
+            participant.Streak = answer.IsCorrect ? participant.Streak + 1 : 0;
+            var points = answer.IsCorrect ? 100 + Math.Min(participant.Streak - 1, 10) * 10 + (request.UseRocket ? 50 : 0) : 0;
+            if (request.UseRocket) participant.RocketUsed = true;
+            answer.PointsAwarded = points;
+            participant.Score += points;
+            if (index + 1 == battle.QuestionCount)
+                participant.TotalAnswerMilliseconds = (long)(now - battle.StartedAt.Value).TotalMilliseconds;
+            return new BattleAnswerDto(index, answer.ChoiceId, answer.IsCorrect, points, participant.Score);
         }, ct);
-        await PublishAsync(battleId, battleCompleted ? "BattleCompleted" : "AnswerReceived");
+        await PublishAsync(battleId, "AnswerReceived");
         return receipt;
     }
 
@@ -348,14 +382,20 @@ public sealed class QuizBattleService(LetsLearnContext db, IHubContext<QuizBattl
     {
         var now = Now;
         var ids = await db.QuizBattles.AsNoTracking().Where(b => b.Status == "active" && b.StartedAt.HasValue
-            && b.StartedAt.Value.AddSeconds(JoinWindowSeconds) <= now)
+            && b.QuestionStartedAt.HasValue && b.QuestionStartedAt.Value.AddSeconds(b.SecondsPerQuestion) <= now)
             .OrderBy(b => b.StartedAt).Select(b => b.Id).Take(100).ToListAsync(ct);
         foreach (var id in ids)
         {
             try
             {
-                var changed = await WithBattleLockAsync(id, b => CompleteIfReadyAsync(b, Now, ct), ct);
-                if (changed) await PublishAsync(id, "BattleCompleted");
+                var status = await WithBattleLockAsync(id, async b =>
+                {
+                    if (b.Status != "active" || !b.QuestionStartedAt.HasValue || Now < b.QuestionStartedAt.Value.AddSeconds(b.SecondsPerQuestion)) return null;
+                    await ResetMissedStreaksAsync(b, ct);
+                    AdvanceQuestion(b, b.QuestionStartedAt.Value.AddSeconds(b.SecondsPerQuestion));
+                    return b.Status;
+                }, ct);
+                if (status != null) await PublishAsync(id, status == "completed" ? "BattleCompleted" : "BattleQuestionChanged");
             }
             catch (KeyNotFoundException) { /* Host/account deletion raced the scan. */ }
         }
@@ -406,26 +446,37 @@ public sealed class QuizBattleService(LetsLearnContext db, IHubContext<QuizBattl
         return db.Users.AsNoTracking().Where(u => ids.Contains(u.Id)).ToDictionaryAsync(u => u.Id, ct);
     }
 
-    private static bool CompleteIfDue(QuizBattle battle, DateTime now)
-    {
-        if (battle.Status != "active" || !battle.StartedAt.HasValue || now < EndAt(battle)) return false;
-        battle.Status = "completed";
-        battle.CompletedAt = EndAt(battle);
-        return true;
-    }
-
     private async Task<bool> CompleteIfReadyAsync(QuizBattle battle, DateTime now, CancellationToken ct)
     {
-        if (CompleteIfDue(battle, now)) return true;
-        if (battle.Status != "active" || !battle.StartedAt.HasValue || now < JoinEndsAt(battle)) return false;
-        var answerCount = await db.QuizBattleAnswers.CountAsync(a => a.BattleId == battle.Id, ct);
-        if (answerCount < battle.Participants.Count * battle.QuestionCount) return false;
-        battle.Status = "completed";
-        battle.CompletedAt = now;
+        if (battle.Status != "active" || !battle.QuestionStartedAt.HasValue || now < battle.QuestionStartedAt.Value.AddSeconds(battle.SecondsPerQuestion)) return false;
+        await ResetMissedStreaksAsync(battle, ct);
+        AdvanceQuestion(battle, battle.QuestionStartedAt.Value.AddSeconds(battle.SecondsPerQuestion));
         return true;
     }
 
-    private static int Points(QuizBattle b, QuizBattleAnswer a) => a.IsCorrect ? 100 : 0;
+    private async Task ResetMissedStreaksAsync(QuizBattle battle, CancellationToken ct)
+    {
+        var correctIds = await db.QuizBattleAnswers.AsNoTracking()
+            .Where(a => a.BattleId == battle.Id && a.QuestionIndex == battle.CurrentQuestionIndex && a.IsCorrect)
+            .Select(a => a.UserId).ToListAsync(ct);
+        var correct = correctIds.ToHashSet();
+        foreach (var participant in battle.Participants.Where(p => !correct.Contains(p.UserId))) participant.Streak = 0;
+    }
+
+    private static void AdvanceQuestion(QuizBattle battle, DateTime at)
+    {
+        if (battle.Status != "active") return;
+        if (battle.CurrentQuestionIndex + 1 >= battle.QuestionCount)
+        {
+            battle.Status = "completed";
+            battle.CompletedAt = at;
+            return;
+        }
+        battle.CurrentQuestionIndex++;
+        battle.QuestionStartedAt = at;
+    }
+
+    private static int Points(QuizBattle b, QuizBattleAnswer a) => a.PointsAwarded > 0 ? a.PointsAwarded : a.IsCorrect ? 100 : 0;
     private static BattleAnswerDto Receipt(QuizBattle b, QuizBattleAnswer a, int score) =>
         new(a.QuestionIndex, a.ChoiceId, a.IsCorrect, Points(b, a), score);
 
@@ -437,7 +488,7 @@ public sealed class QuizBattleService(LetsLearnContext db, IHubContext<QuizBattl
             Player = p,
             Correct = answers.Count(a => a.UserId == p.UserId && a.IsCorrect),
             Time = answers.Count(a => a.UserId == p.UserId) >= battle.QuestionCount
-                ? p.TotalAnswerMilliseconds : battle.SecondsPerQuestion * 1000L
+                ? p.TotalAnswerMilliseconds : (long)battle.SecondsPerQuestion * battle.QuestionCount * 1000L
         }).OrderByDescending(r => r.Player.Score).ThenBy(r => r.Time).ThenBy(r => r.Player.UserId).ToList();
         var result = new List<BattleResultDto>();
         var rank = 0;

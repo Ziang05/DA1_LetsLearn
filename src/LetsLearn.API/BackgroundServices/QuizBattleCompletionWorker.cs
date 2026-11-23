@@ -15,7 +15,7 @@ public sealed class QuizBattleCompletionWorker(IServiceScopeFactory scopes, ILog
                 await scope.ServiceProvider.GetRequiredService<QuizBattleService>().CompleteDueBattlesAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
-            catch (Exception ex) { logger.LogError(ex, "Could not finalize due Quiz Battles; retrying next tick"); }
+            catch (Exception ex) { logger.LogError(ex, "Could not advance due Quiz Battle questions; retrying next tick"); }
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 }

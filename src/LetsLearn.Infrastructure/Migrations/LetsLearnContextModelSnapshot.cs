@@ -34,6 +34,8 @@ namespace LetsLearn.Infrastructure.Migrations
                     b.Property<string>("QuestionsJson").IsRequired().HasColumnType("text");
                     b.Property<Guid?>("RematchOfBattleId").HasColumnType("uuid");
                     b.Property<int>("QuestionCount").HasColumnType("integer");
+                    b.Property<int>("CurrentQuestionIndex").HasColumnType("integer");
+                    b.Property<DateTime?>("QuestionStartedAt").HasColumnType("timestamp with time zone");
                     b.Property<int>("SecondsPerQuestion").HasColumnType("integer");
                     b.Property<DateTime?>("StartedAt").HasColumnType("timestamp with time zone");
                     b.Property<string>("Status").IsRequired().HasColumnType("text");
@@ -51,6 +53,8 @@ namespace LetsLearn.Infrastructure.Migrations
                     b.Property<Guid>("BattleId").HasColumnType("uuid");
                     b.Property<DateTime>("JoinedAt").HasColumnType("timestamp with time zone");
                     b.Property<int>("Score").HasColumnType("integer");
+                    b.Property<int>("Streak").HasColumnType("integer");
+                    b.Property<bool>("RocketUsed").HasColumnType("boolean");
                     b.Property<long>("TotalAnswerMilliseconds").HasColumnType("bigint");
                     b.Property<Guid>("UserId").HasColumnType("uuid");
                     b.HasKey("Id");
@@ -63,6 +67,7 @@ namespace LetsLearn.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
                     b.Property<long>("AnswerMilliseconds").HasColumnType("bigint");
+                    b.Property<int>("PointsAwarded").HasColumnType("integer");
                     b.Property<Guid>("BattleId").HasColumnType("uuid");
                     b.Property<Guid?>("ChoiceId").HasColumnType("uuid");
                     b.Property<bool>("IsCorrect").HasColumnType("boolean");

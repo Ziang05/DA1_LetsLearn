@@ -27,6 +27,10 @@ public sealed class QuizBattleController(QuizBattleService service) : Controller
     public async Task<IActionResult> End(Guid id, CancellationToken ct) =>
         await Execute(() => service.EndEarlyAsync(id, UserId(), ct));
 
+    [HttpPost("{id:guid}/advance")]
+    public async Task<IActionResult> Advance(Guid id, CancellationToken ct) =>
+        await Execute(() => service.AdvanceAsync(id, UserId(), ct));
+
     [HttpPost("{id:guid}/rematch")]
     public async Task<IActionResult> Rematch(Guid id, CancellationToken ct) =>
         await Execute(() => service.RematchAsync(id, UserId(), ct));
