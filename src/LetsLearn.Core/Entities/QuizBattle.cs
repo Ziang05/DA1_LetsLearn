@@ -10,6 +10,8 @@ public class QuizBattle
     public string Status { get; set; } = "waiting";
     public int QuestionCount { get; set; }
     public int SecondsPerQuestion { get; set; }
+    public int CurrentQuestionIndex { get; set; }
+    public DateTime? QuestionStartedAt { get; set; }
     public string QuestionsJson { get; set; } = "[]";
     public Guid? RematchOfBattleId { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -26,6 +28,8 @@ public class QuizBattleParticipant
     public Guid UserId { get; set; }
     public DateTime JoinedAt { get; set; }
     public int Score { get; set; }
+    public int Streak { get; set; }
+    public bool RocketUsed { get; set; }
     public long TotalAnswerMilliseconds { get; set; }
 }
 
@@ -37,6 +41,7 @@ public class QuizBattleAnswer
     public int QuestionIndex { get; set; }
     public Guid? ChoiceId { get; set; }
     public bool IsCorrect { get; set; }
+    public int PointsAwarded { get; set; }
     public long AnswerMilliseconds { get; set; }
     public DateTime SubmittedAt { get; set; }
 }
